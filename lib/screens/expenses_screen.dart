@@ -11,7 +11,8 @@ class ExpensesScreen extends StatefulWidget {
 }
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
-  final supabase = Supabase.instance.client;
+  final _api = SupabaseService();
+
   List<Map<String, dynamic>> _expenses = [];
   bool _isLoading = true;
 
@@ -37,25 +38,30 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final expensesRes = await supabase
-          .from('expenses')
-          .select()
-          .order('created_at', ascending: false);
-
+      // Préparation des dates (Logique purement Flutter)
       final now = DateTime.now();
       final moisActuelStart = DateTime(now.year, now.month, 1);
       final moisActuelEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-
       final moisPrecedentStart = DateTime(now.year, now.month - 1, 1);
       final moisPrecedentEnd = DateTime(now.year, now.month, 0, 23, 59, 59);
 
-      _totalMoisActuel = await _getTotal('expenses', 'created_at', moisActuelStart, moisActuelEnd);
-      _totalMoisPrecedent = await _getTotal('expenses', 'created_at', moisPrecedentStart, moisPrecedentEnd);
+      // APPELS AU SERVICE (On ne voit plus "supabase" ici !)
+      final expensesRes = await _api.getExpenses();
+
+      _totalMoisActuel = await _api.getTotalExpensesByPeriod(
+        moisActuelStart,
+        moisActuelEnd,
+      );
+      _totalMoisPrecedent = await _api.getTotalExpensesByPeriod(
+        moisPrecedentStart,
+        moisPrecedentEnd,
+      );
+
       _difference = _totalMoisActuel - _totalMoisPrecedent;
 
       if (mounted) {
         setState(() {
-          _expenses = List<Map<String, dynamic>>.from(expensesRes);
+          _expenses = expensesRes;
           _isLoading = false;
         });
       }
@@ -63,14 +69,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       print('Erreur chargement dépenses: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur chargement : $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erreur chargement : $e')));
       }
     }
   }
 
-  Future<double> _getTotal(String table, String dateColumn, DateTime start, DateTime end) async {
+  Future<double> _getTotal(
+    String table,
+    String dateColumn,
+    DateTime start,
+    DateTime end,
+  ) async {
     try {
       final res = await supabase
           .from(table)
@@ -78,7 +89,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           .gte(dateColumn, start.toIso8601String())
           .lte(dateColumn, end.toIso8601String());
 
-      return res.fold<double>(0.0, (sum, row) => sum + ((row['amount'] as num?)?.toDouble() ?? 0.0));
+      return res.fold<double>(
+        0.0,
+        (sum, row) => sum + ((row['amount'] as num?)?.toDouble() ?? 0.0),
+      );
     } catch (e) {
       print('Erreur _getTotal: $e');
       return 0.0;
@@ -123,7 +137,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
     if (descriptionFilter.isNotEmpty) {
       final q = descriptionFilter.toLowerCase();
-      list = list.where((e) => (e['description'] as String?)?.toLowerCase().contains(q) ?? false).toList();
+      list = list
+          .where(
+            (e) =>
+                (e['description'] as String?)?.toLowerCase().contains(q) ??
+                false,
+          )
+          .toList();
     }
 
     if (startDate != null || endDate != null) {
@@ -145,7 +165,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return list;
   }
 
-  num getTotalExpenses() => filteredExpenses.fold<num>(0, (sum, item) => sum + (item['amount'] as num? ?? 0));
+  num getTotalExpenses() => filteredExpenses.fold<num>(
+    0,
+    (sum, item) => sum + (item['amount'] as num? ?? 0),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -161,8 +184,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           IconButton(
             icon: Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.orange.shade100),
-              child: Icon(Icons.filter_list, color: Colors.orange.shade800, size: 22),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.orange.shade100,
+              ),
+              child: Icon(
+                Icons.filter_list,
+                color: Colors.orange.shade800,
+                size: 22,
+              ),
             ),
             onPressed: _showFilterBottomSheet,
           ),
@@ -179,7 +209,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildTabButton('Liste', _selectedTab == 'Liste'),
-                      _buildTabButton('Dashboard annuel', _selectedTab == 'Dashboard annuel'),
+                      _buildTabButton(
+                        'Dashboard annuel',
+                        _selectedTab == 'Dashboard annuel',
+                      ),
                     ],
                   ),
                 ),
@@ -189,13 +222,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     padding: const EdgeInsets.all(12.0),
                     child: Card(
                       elevation: 2,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Total dépenses', style: TextStyle(fontSize: isSmall ? 15 : 17)),
+                            Text(
+                              'Total dépenses',
+                              style: TextStyle(fontSize: isSmall ? 15 : 17),
+                            ),
                             FittedBox(
                               fit: BoxFit.scaleDown,
                               child: Text(
@@ -215,7 +253,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
                 if (_selectedTab == 'Liste')
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -231,7 +272,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               },
                               selectedColor: Colors.orange.shade700,
                               backgroundColor: Colors.grey.shade200,
-                              labelStyle: TextStyle(color: sel ? Colors.white : Colors.black87),
+                              labelStyle: TextStyle(
+                                color: sel ? Colors.white : Colors.black87,
+                              ),
                               visualDensity: VisualDensity.compact,
                             ),
                           );
@@ -294,7 +337,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
@@ -334,7 +379,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       const SizedBox(height: 2),
                       Text(
                         e['created_at']?.substring(0, 10) ?? '',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                     ],
                   ),
@@ -348,7 +396,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     children: [
                       Text(
                         formatCFA(amount),
-                        style:  TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Colors.orange.shade800,
@@ -361,7 +409,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           Icon(
                             Icons.lock,
                             size: 18,
-                            color: locked ? Colors.yellow.shade800 : Colors.grey.shade400,
+                            color: locked
+                                ? Colors.yellow.shade800
+                                : Colors.grey.shade400,
                           ),
                           const SizedBox(width: 4),
                           IconButton(
@@ -400,7 +450,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         children: [
           Card(
             elevation: 3,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             color: Colors.orange.shade50,
             child: Padding(
               padding: const EdgeInsets.all(20.0),
@@ -427,7 +479,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        _difference >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                        _difference >= 0
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward,
                         color: _getDiffColor(_difference),
                         size: 20,
                       ),
@@ -456,7 +510,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               elevation: 1,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: ListTile(
                 dense: true,
                 title: Text(month, style: TextStyle(fontSize: 15)),
@@ -466,14 +522,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   children: [
                     Text(
                       formatCFA(amount),
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       diff > 0
                           ? '+${formatCFA(diff)} vs préc.'
                           : diff < 0
-                              ? '${formatCFA(diff)} vs préc.'
-                              : '0 vs préc.',
+                          ? '${formatCFA(diff)} vs préc.'
+                          : '0 vs préc.',
                       style: TextStyle(
                         fontSize: 12,
                         color: diffColor,
@@ -505,7 +564,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
 
     final sortedKeys = map.keys.toList()
-      ..sort((a, b) => DateFormat('MMMM yyyy').parse(b).compareTo(DateFormat('MMMM yyyy').parse(a)));
+      ..sort(
+        (a, b) => DateFormat(
+          'MMMM yyyy',
+        ).parse(b).compareTo(DateFormat('MMMM yyyy').parse(a)),
+      );
 
     for (int i = 0; i < sortedKeys.length - 1; i++) {
       final current = map[sortedKeys[i]]!['amount']!;
@@ -520,7 +583,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -535,10 +600,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Filtrer les dépenses', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Filtrer les dépenses',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 16),
                   TextField(
-                    decoration: const InputDecoration(labelText: 'Description (contient)', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Description (contient)',
+                      border: OutlineInputBorder(),
+                    ),
                     onChanged: (val) {
                       setState(() => descriptionFilter = val.trim());
                       setModalState(() {});
@@ -561,7 +632,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               setModalState(() {});
                             }
                           },
-                          child: Text(startDate == null ? 'Date début' : DateFormat('dd/MM/yyyy').format(startDate!)),
+                          child: Text(
+                            startDate == null
+                                ? 'Date début'
+                                : DateFormat('dd/MM/yyyy').format(startDate!),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -579,7 +654,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               setModalState(() {});
                             }
                           },
-                          child: Text(endDate == null ? 'Date fin' : DateFormat('dd/MM/yyyy').format(endDate!)),
+                          child: Text(
+                            endDate == null
+                                ? 'Date fin'
+                                : DateFormat('dd/MM/yyyy').format(endDate!),
+                          ),
                         ),
                       ),
                     ],
@@ -589,7 +668,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade700,
+                        ),
                         onPressed: () {
                           setState(() {
                             descriptionFilter = '';
@@ -601,7 +682,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         },
                         child: const Text('Réinitialiser'),
                       ),
-                      ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Fermer'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -648,16 +732,22 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         hintText: 'Exemple : 375000 ou 375.50',
                         helperText: 'Utilisez le point (.) pour les décimales',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}'),
+                        ),
                       ],
                       onChanged: (value) {
                         final cleaned = value.replaceAll(',', '.');
                         if (cleaned != value) {
                           amountCtrl.value = amountCtrl.value.copyWith(
                             text: cleaned,
-                            selection: TextSelection.collapsed(offset: cleaned.length),
+                            selection: TextSelection.collapsed(
+                              offset: cleaned.length,
+                            ),
                           );
                         }
                       },
@@ -705,23 +795,33 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               onPressed: () async {
                 Navigator.pop(dialogContext);
 
-                if (descriptionCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+                if (descriptionCtrl.text.trim().isEmpty ||
+                    amountCtrl.text.trim().isEmpty) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Description et montant obligatoires')),
+                      const SnackBar(
+                        content: Text('Description et montant obligatoires'),
+                      ),
                     );
                   }
                   return;
                 }
 
                 try {
-                  final montantText = amountCtrl.text.trim().replaceAll(',', '.').replaceAll(' ', '');
+                  final montantText = amountCtrl.text
+                      .trim()
+                      .replaceAll(',', '.')
+                      .replaceAll(' ', '');
                   final amount = double.tryParse(montantText) ?? 0.0;
 
                   if (amount <= 0) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Montant invalide (ex. 375000 ou 375.50)')),
+                        const SnackBar(
+                          content: Text(
+                            'Montant invalide (ex. 375000 ou 375.50)',
+                          ),
+                        ),
                       );
                     }
                     return;
@@ -730,7 +830,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   await supabase.from('expenses').insert({
                     'description': descriptionCtrl.text.trim(),
                     'amount': amount,
-                    'category': categoryCtrl.text.trim().isEmpty ? null : categoryCtrl.text.trim(),
+                    'category': categoryCtrl.text.trim().isEmpty
+                        ? null
+                        : categoryCtrl.text.trim(),
                     'created_at': expenseDate.toIso8601String(),
                     'paid': paid,
                     'locked': false,
@@ -739,7 +841,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   if (mounted) {
                     await _loadData();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Dépense ajoutée avec succès')),
+                      const SnackBar(
+                        content: Text('Dépense ajoutée avec succès'),
+                      ),
                     );
                   }
                 } catch (e) {
@@ -759,10 +863,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   void _showEditExpenseDialog(Map<String, dynamic> expense) {
-    final descriptionCtrl = TextEditingController(text: expense['description'] ?? '');
-    final amountCtrl = TextEditingController(text: expense['amount'].toString());
+    final descriptionCtrl = TextEditingController(
+      text: expense['description'] ?? '',
+    );
+    final amountCtrl = TextEditingController(
+      text: expense['amount'].toString(),
+    );
     final categoryCtrl = TextEditingController(text: expense['category'] ?? '');
-    DateTime expenseDate = DateTime.tryParse(expense['created_at'] ?? '') ?? DateTime.now();
+    DateTime expenseDate =
+        DateTime.tryParse(expense['created_at'] ?? '') ?? DateTime.now();
     bool paid = expense['paid'] ?? true;
     bool locked = expense['locked'] ?? false;
 
@@ -793,16 +902,22 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         hintText: 'Exemple : 375000 ou 375.50',
                         helperText: 'Utilisez le point (.) pour les décimales',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}'),
+                        ),
                       ],
                       onChanged: (value) {
                         final cleaned = value.replaceAll(',', '.');
                         if (cleaned != value) {
                           amountCtrl.value = amountCtrl.value.copyWith(
                             text: cleaned,
-                            selection: TextSelection.collapsed(offset: cleaned.length),
+                            selection: TextSelection.collapsed(
+                              offset: cleaned.length,
+                            ),
                           );
                         }
                       },
@@ -855,41 +970,58 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               onPressed: () async {
                 Navigator.pop(dialogContext);
 
-                if (descriptionCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+                if (descriptionCtrl.text.trim().isEmpty ||
+                    amountCtrl.text.trim().isEmpty) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Description et montant obligatoires')),
+                      const SnackBar(
+                        content: Text('Description et montant obligatoires'),
+                      ),
                     );
                   }
                   return;
                 }
 
                 try {
-                  final montantText = amountCtrl.text.trim().replaceAll(',', '.').replaceAll(' ', '');
+                  final montantText = amountCtrl.text
+                      .trim()
+                      .replaceAll(',', '.')
+                      .replaceAll(' ', '');
                   final amount = double.tryParse(montantText) ?? 0.0;
 
                   if (amount <= 0) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Montant invalide (ex. 375000 ou 375.50)')),
+                        const SnackBar(
+                          content: Text(
+                            'Montant invalide (ex. 375000 ou 375.50)',
+                          ),
+                        ),
                       );
                     }
                     return;
                   }
 
-                  await supabase.from('expenses').update({
-                    'description': descriptionCtrl.text.trim(),
-                    'amount': amount,
-                    'category': categoryCtrl.text.trim().isEmpty ? null : categoryCtrl.text.trim(),
-                    'created_at': expenseDate.toIso8601String(),
-                    'paid': paid,
-                    'locked': locked,
-                  }).eq('id', expense['id']);
+                  await supabase
+                      .from('expenses')
+                      .update({
+                        'description': descriptionCtrl.text.trim(),
+                        'amount': amount,
+                        'category': categoryCtrl.text.trim().isEmpty
+                            ? null
+                            : categoryCtrl.text.trim(),
+                        'created_at': expenseDate.toIso8601String(),
+                        'paid': paid,
+                        'locked': locked,
+                      })
+                      .eq('id', expense['id']);
 
                   if (mounted) {
                     await _loadData();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Dépense modifiée avec succès')),
+                      const SnackBar(
+                        content: Text('Dépense modifiée avec succès'),
+                      ),
                     );
                   }
                 } catch (e) {
@@ -913,7 +1045,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Supprimer dépense ?'),
-        content: Text('Voulez-vous supprimer cette dépense du ${expense['created_at']?.substring(0, 10) ?? 'date inconnue'} ?'),
+        content: Text(
+          'Voulez-vous supprimer cette dépense du ${expense['created_at']?.substring(0, 10) ?? 'date inconnue'} ?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -933,11 +1067,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       await supabase.from('expenses').delete().eq('id', expense['id']);
       if (mounted) {
         await _loadData();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dépense supprimée')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Dépense supprimée')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur suppression : $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erreur suppression : $e')));
       }
     }
   }
