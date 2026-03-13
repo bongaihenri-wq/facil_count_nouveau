@@ -41,6 +41,8 @@ dependencies:
   supabase_flutter: ^2.12.0
   community_charts_flutter: ^1.0.4
   flutter_dotenv: ^6.0.0
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:

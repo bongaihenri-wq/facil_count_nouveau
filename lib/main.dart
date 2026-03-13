@@ -1,30 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'screens/home_screen.dart';
-// ignore: unused_import
-import 'screens/dashboard_screen.dart';
-// ignore: unused_import
-import 'screens/purchases_screen.dart';
-// ignore: unused_import
-import 'screens/sales_screen.dart';
-// ignore: unused_import
-import 'screens/expenses_screen.dart';
-// ignore: unused_import
-import 'screens/invoices_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+import 'screens/home_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/purchases_screen.dart';
+import 'screens/sales_screen.dart';
+import 'screens/expenses_screen.dart';
+import 'screens/invoices_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // On charge le fichier .env
-  await dotenv.load(fileName: ".env");
+  // Initialisation des données de localisation
+  await initializeDateFormatting('fr');
 
-  // On utilise les variables chargées au lieu de les écrire en dur
+  // Chargement des variables d'environnement
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint('Erreur chargement .env: $e');
+    throw Exception(
+      'Impossible de charger les variables d\'environnement. Vérifiez le fichier .env.',
+    );
+  }
+
+  // Validation des variables Supabase
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+
+  if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
+    throw Exception('Les clés Supabase sont manquantes dans le fichier .env.');
+  }
+
+  // Initialisation de Supabase
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL'] ?? '',
-    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+    debug: false,
   );
+
   runApp(const FacilCountApp());
 }
 
@@ -36,35 +53,89 @@ class FacilCountApp extends StatelessWidget {
     return MaterialApp(
       title: 'Facil Count',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('fr')],
+      locale: const Locale('fr'),
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue[700]!,
-          primary: Colors.blue[700],
-          secondary: Colors.grey[600]!,
-          background: Colors.grey[100],
+          seedColor: Colors.blue.shade700,
+          primary: Colors.blue.shade700,
+          secondary: Colors.grey.shade600,
+          background: Colors.grey.shade100,
           surface: Colors.white,
-          error: Colors.red[700],
+          error: Colors.red.shade700,
+          brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: Colors.grey[100],
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color.fromARGB(255, 30, 136, 229),
+        scaffoldBackgroundColor: Colors.grey.shade100,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.blue.shade700,
           foregroundColor: Colors.white,
-          elevation: 0,
+          elevation: 2,
+          centerTitle: true,
+          titleTextStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         cardTheme: CardThemeData(
+          // Utilisation correcte de CardTheme
           elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
+          margin: const EdgeInsets.symmetric(vertical: 8),
         ),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
           backgroundColor: Colors.white,
-          selectedItemColor: Color.fromARGB(255, 30, 136, 229),
-          unselectedItemColor: Colors.grey,
+          selectedItemColor: Colors.blue.shade700,
+          unselectedItemColor: Colors.grey.shade600,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey.shade400),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.blue.shade700, width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue.shade700,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: Colors.blue.shade700),
         ),
       ),
-      home: const HomeScreen(),
+      routes: {
+        '/': (context) => const HomeScreen(),
+        '/dashboard': (context) => const DashboardScreen(),
+        '/purchases': (context) => const PurchasesScreen(),
+        '/sales': (context) => const SalesScreen(),
+        '/expenses': (context) => const ExpensesScreen(),
+        '/invoices': (context) => const InvoicesScreen(),
+      },
+      initialRoute: '/',
     );
   }
 }

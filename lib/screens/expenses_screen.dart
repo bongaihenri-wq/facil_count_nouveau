@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/services.dart'; // ← IMPORT AJOUTÉ ICI
+import 'package:facil_count_nouveau/core/constants/app_colors.dart';
+import 'package:facil_count_nouveau/core/services/supabase_service.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -11,18 +13,16 @@ class ExpensesScreen extends StatefulWidget {
 }
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
+  // --- 1. Initialisation ---
   final _api = SupabaseService();
-
-  List<Map<String, dynamic>> _expenses = [];
+  final _supabase = Supabase.instance.client;
   bool _isLoading = true;
-
+  List<Map<String, dynamic>> _expenses = [];
   String _selectedPeriod = 'Mois';
   String _selectedTab = 'Liste';
-
-  String descriptionFilter = '';
-  DateTime? startDate;
-  DateTime? endDate;
-
+  String _descriptionFilter = '';
+  DateTime? _startDate;
+  DateTime? _endDate;
   double _totalMoisActuel = 0;
   double _totalMoisPrecedent = 0;
   double _difference = 0;
@@ -38,92 +38,73 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Préparation des dates (Logique purement Flutter)
-      final now = DateTime.now();
-      final moisActuelStart = DateTime(now.year, now.month, 1);
-      final moisActuelEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-      final moisPrecedentStart = DateTime(now.year, now.month - 1, 1);
-      final moisPrecedentEnd = DateTime(now.year, now.month, 0, 23, 59, 59);
-
-      // APPELS AU SERVICE (On ne voit plus "supabase" ici !)
+      // Chargement des dépenses
       final expensesRes = await _api.getExpenses();
+      setState(() => _expenses = expensesRes);
 
-      _totalMoisActuel = await _api.getTotalExpensesByPeriod(
-        moisActuelStart,
-        moisActuelEnd,
-      );
-      _totalMoisPrecedent = await _api.getTotalExpensesByPeriod(
-        moisPrecedentStart,
-        moisPrecedentEnd,
-      );
-
-      _difference = _totalMoisActuel - _totalMoisPrecedent;
-
-      if (mounted) {
-        setState(() {
-          _expenses = expensesRes;
-          _isLoading = false;
-        });
-      }
+      // Calcul des totaux mensuels
+      await _calculateMonthlyTotals();
     } catch (e) {
-      print('Erreur chargement dépenses: $e');
       if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur chargement : $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur chargement: ${e.toString()}')),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<double> _getTotal(
-    String table,
-    String dateColumn,
-    DateTime start,
-    DateTime end,
-  ) async {
+  Future<void> _calculateMonthlyTotals() async {
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    final firstDayOfPreviousMonth = DateTime(now.year, now.month - 1, 1);
+    final lastDayOfPreviousMonth = DateTime(now.year, now.month, 0, 23, 59, 59);
+
+    // Utilisation de _getTotalLocal pour éviter les erreurs d'API
+    _totalMoisActuel = await _getTotalLocal(firstDayOfMonth, lastDayOfMonth);
+    _totalMoisPrecedent = await _getTotalLocal(
+      firstDayOfPreviousMonth,
+      lastDayOfPreviousMonth,
+    );
+    _difference = _totalMoisActuel - _totalMoisPrecedent;
+  }
+
+  // Méthode locale pour calculer les totaux (remplace _api.getTotalExpensesByPeriod)
+  Future<double> _getTotalLocal(DateTime start, DateTime end) async {
     try {
-      final res = await supabase
-          .from(table)
+      final res = await _supabase
+          .from('expenses')
           .select('amount')
-          .gte(dateColumn, start.toIso8601String())
-          .lte(dateColumn, end.toIso8601String());
+          .gte('created_at', start.toIso8601String())
+          .lte('created_at', end.toIso8601String());
 
       return res.fold<double>(
         0.0,
         (sum, row) => sum + ((row['amount'] as num?)?.toDouble() ?? 0.0),
       );
     } catch (e) {
-      print('Erreur _getTotal: $e');
       return 0.0;
     }
   }
 
-  String formatCFA(num amount) {
-    final formatter = NumberFormat('#,###', 'fr_FR');
-    final formatted = formatter.format(amount.abs());
-    return '$formatted F CFA';
-  }
-
-  Color _getDiffColor(double diff) {
-    if (diff > 0) return Colors.red.shade700;
-    if (diff < 0) return Colors.green.shade700;
-    return Colors.grey.shade700;
-  }
-
-  List<Map<String, dynamic>> get filteredExpenses {
+  // --- 2. Logique de filtrage ---
+  List<Map<String, dynamic>> get _filteredExpenses {
     var list = List<Map<String, dynamic>>.from(_expenses);
-
     final now = DateTime.now();
     DateTime periodStart;
     DateTime periodEnd = now.add(const Duration(days: 1));
 
-    if (_selectedPeriod == 'Semaine') {
-      periodStart = now.subtract(Duration(days: now.weekday - 1));
-    } else if (_selectedPeriod == 'Mois') {
-      periodStart = DateTime(now.year, now.month, 1);
-    } else {
-      periodStart = DateTime(now.year, 1, 1);
+    switch (_selectedPeriod) {
+      case 'Semaine':
+        periodStart = now.subtract(Duration(days: now.weekday - 1));
+        break;
+      case 'Mois':
+        periodStart = DateTime(now.year, now.month, 1);
+        break;
+      default: // Année
+        periodStart = DateTime(now.year, 1, 1);
     }
 
     list = list.where((e) {
@@ -135,8 +116,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           date.isBefore(periodEnd);
     }).toList();
 
-    if (descriptionFilter.isNotEmpty) {
-      final q = descriptionFilter.toLowerCase();
+    if (_descriptionFilter.isNotEmpty) {
+      final q = _descriptionFilter.toLowerCase();
       list = list
           .where(
             (e) =>
@@ -146,12 +127,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           .toList();
     }
 
-    if (startDate != null || endDate != null) {
+    if (_startDate != null || _endDate != null) {
       list = list.where((e) {
         final date = DateTime.tryParse(e['created_at'] ?? '');
         if (date == null) return false;
-        if (startDate != null && date.isBefore(startDate!)) return false;
-        if (endDate != null && date.isAfter(endDate!)) return false;
+        if (_startDate != null && date.isBefore(_startDate!)) return false;
+        if (_endDate != null && date.isAfter(_endDate!)) return false;
         return true;
       }).toList();
     }
@@ -165,15 +146,52 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return list;
   }
 
-  num getTotalExpenses() => filteredExpenses.fold<num>(
-    0,
-    (sum, item) => sum + (item['amount'] as num? ?? 0),
-  );
+  // --- 3. UI Helpers ---
+  String _formatCFA(num amount) {
+    final formatter = NumberFormat('#,###', 'fr_FR');
+    return '${formatter.format(amount.abs())} F CFA';
+  }
 
+  Color _getDiffColor(double diff) {
+    if (diff > 0) return Colors.red.shade700;
+    if (diff < 0) return Colors.green.shade700;
+    return Colors.grey.shade700;
+  }
+
+  Map<String, Map<String, num>> _getMonthlyTotalsWithDiff() {
+    final map = <String, Map<String, num>>{};
+    final fmt = DateFormat('MMMM yyyy', 'fr_FR');
+
+    for (var e in _expenses) {
+      final dateStr = e['created_at'] as String?;
+      if (dateStr == null) continue;
+      final date = DateTime.tryParse(dateStr);
+      if (date == null) continue;
+      final key = fmt.format(date);
+      map.putIfAbsent(key, () => {'amount': 0, 'diff': 0});
+      map[key]!['amount'] =
+          (map[key]!['amount']! + (e['amount'] as num? ?? 0)) as num;
+    }
+
+    final sortedKeys = map.keys.toList()
+      ..sort((a, b) => fmt.parse(b).compareTo(fmt.parse(a)));
+
+    for (int i = 0; i < sortedKeys.length - 1; i++) {
+      final current = map[sortedKeys[i]]!['amount']! as num;
+      final previous = map[sortedKeys[i + 1]]!['amount']! as num;
+      map[sortedKeys[i]]!['diff'] = (current - previous) as num;
+    }
+
+    return Map.fromEntries(sortedKeys.map((key) => MapEntry(key, map[key]!)));
+  }
+
+  // --- 4. UI Build ---
   @override
   Widget build(BuildContext context) {
-    final total = getTotalExpenses();
-    final displayedList = filteredExpenses;
+    final total = _filteredExpenses.fold<num>(
+      0,
+      (sum, item) => sum + (item['amount'] as num? ?? 0),
+    );
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmall = screenWidth < 400;
 
@@ -202,6 +220,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                // Onglets
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -216,78 +235,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ],
                   ),
                 ),
-
-                if (_selectedTab == 'Liste')
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Total dépenses',
-                              style: TextStyle(fontSize: isSmall ? 15 : 17),
-                            ),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                formatCFA(total),
-                                style: TextStyle(
-                                  fontSize: isSmall ? 17 : 19,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange.shade800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                if (_selectedTab == 'Liste')
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: ['Semaine', 'Mois', 'Année'].map((p) {
-                          final sel = p == _selectedPeriod;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: FilterChip(
-                              label: Text(p, style: TextStyle(fontSize: 13)),
-                              selected: sel,
-                              onSelected: (v) {
-                                if (v) setState(() => _selectedPeriod = p);
-                              },
-                              selectedColor: Colors.orange.shade700,
-                              backgroundColor: Colors.grey.shade200,
-                              labelStyle: TextStyle(
-                                color: sel ? Colors.white : Colors.black87,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-
-                Expanded(
-                  child: _selectedTab == 'Liste'
-                      ? _buildExpensesList(displayedList)
-                      : _buildCompactAnnualDashboard(),
-                ),
+                // Contenu selon l'onglet
+                if (_selectedTab == 'Liste') ...[
+                  _buildTotalCard(total, isSmall),
+                  _buildPeriodFilterChips(),
+                  Expanded(child: _buildExpensesList()),
+                ] else ...[
+                  Expanded(child: _buildCompactAnnualDashboard()),
+                ],
               ],
             ),
       floatingActionButton: FloatingActionButton(
@@ -299,6 +254,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
+  // --- Widgets UI ---
   Widget _buildTabButton(String label, bool selected) {
     return GestureDetector(
       onTap: () => setState(() => _selectedTab = label),
@@ -320,130 +276,192 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  Widget _buildExpensesList(List<Map<String, dynamic>> data) {
-    if (data.isEmpty) {
+  Widget _buildTotalCard(num total, bool isSmall) {
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total dépenses',
+                style: TextStyle(fontSize: isSmall ? 15 : 17),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _formatCFA(total),
+                  style: TextStyle(
+                    fontSize: isSmall ? 17 : 19,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPeriodFilterChips() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: ['Semaine', 'Mois', 'Année'].map((p) {
+            final sel = p == _selectedPeriod;
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: FilterChip(
+                label: Text(p, style: const TextStyle(fontSize: 13)),
+                selected: sel,
+                onSelected: (v) => setState(() => _selectedPeriod = p),
+                selectedColor: Colors.orange.shade700,
+                backgroundColor: Colors.grey.shade200,
+                labelStyle: TextStyle(
+                  color: sel ? Colors.white : Colors.black87,
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpensesList() {
+    final displayedList = _filteredExpenses;
+    if (displayedList.isEmpty) {
       return const Center(child: Text('Aucune dépense trouvée'));
     }
-
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      itemCount: data.length,
+      itemCount: displayedList.length,
       itemBuilder: (context, index) {
-        final e = data[index];
+        final e = displayedList[index];
         final desc = e['description'] as String? ?? 'Sans description';
         final amount = e['amount'] as num? ?? 0.0;
         final locked = e['locked'] == true;
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Rond orange avec quantité (1 par défaut pour dépenses)
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.orange.shade100,
-                  child: Text(
-                    '1', // Pas de quantité réelle → 1 fixe ou tu peux ajouter un champ quantité si besoin
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange.shade800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Description + date (petit, effilé)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        desc,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.2,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        e['created_at']?.substring(0, 10) ?? '',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Montant + boutons (alignés à droite)
-                SizedBox(
-                  width: 140,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        formatCFA(amount),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange.shade800,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.lock,
-                            size: 18,
-                            color: locked
-                                ? Colors.yellow.shade800
-                                : Colors.grey.shade400,
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.edit, size: 20),
-                            color: Colors.blue.shade700,
-                            onPressed: () => _showEditExpenseDialog(e),
-                          ),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.delete, size: 20),
-                            color: Colors.red.shade700,
-                            onPressed: () => _deleteExpense(e),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
+        return _buildExpenseCard(e, desc, amount, locked);
       },
+    );
+  }
+
+  Widget _buildExpenseCard(
+    Map<String, dynamic> e,
+    String desc,
+    num amount,
+    bool locked,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.orange.shade100,
+              child: Text(
+                '1',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: _buildExpenseInfo(e, desc)),
+            SizedBox(
+              width: 140,
+              child: _buildExpenseActions(e, amount, locked),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpenseInfo(Map<String, dynamic> e, String desc) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          desc,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            height: 1.2,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          e['created_at']?.substring(0, 10) ?? '',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExpenseActions(Map<String, dynamic> e, num amount, bool locked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          _formatCFA(amount),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: Colors.orange.shade800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock,
+              size: 18,
+              color: locked ? Colors.yellow.shade800 : Colors.grey.shade400,
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: const Icon(Icons.edit, size: 20),
+              color: Colors.blue.shade700,
+              onPressed: () => _showEditExpenseDialog(e),
+            ),
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: const Icon(Icons.delete, size: 20),
+              color: Colors.red.shade700,
+              onPressed: () => _deleteExpense(e),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildCompactAnnualDashboard() {
     final monthlyTotals = _getMonthlyTotalsWithDiff();
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -466,7 +484,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      formatCFA(_totalMoisActuel),
+                      _formatCFA(_totalMoisActuel),
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.bold,
@@ -487,7 +505,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        '${formatCFA(_difference.abs())} vs mois préc.',
+                        '${_formatCFA(_difference.abs())} vs mois préc.',
                         style: TextStyle(
                           fontSize: 15,
                           color: _getDiffColor(_difference),
@@ -506,7 +524,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             final amount = entry.value['amount'] as num;
             final diff = entry.value['diff'] as num;
             final diffColor = _getDiffColor(diff.toDouble());
-
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               elevation: 1,
@@ -515,23 +532,23 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               ),
               child: ListTile(
                 dense: true,
-                title: Text(month, style: TextStyle(fontSize: 15)),
+                title: Text(month, style: const TextStyle(fontSize: 15)),
                 trailing: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      formatCFA(amount),
-                      style: TextStyle(
+                      _formatCFA(amount),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
                       diff > 0
-                          ? '+${formatCFA(diff)} vs préc.'
+                          ? '+${_formatCFA(diff)} vs préc.'
                           : diff < 0
-                          ? '${formatCFA(diff)} vs préc.'
+                          ? '${_formatCFA(diff)} vs préc.'
                           : '0 vs préc.',
                       style: TextStyle(
                         fontSize: 12,
@@ -549,36 +566,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  Map<String, Map<String, num>> _getMonthlyTotalsWithDiff() {
-    final map = <String, Map<String, num>>{};
-    final fmt = DateFormat('MMMM yyyy');
-
-    for (var e in _expenses) {
-      final dateStr = e['created_at'] as String?;
-      if (dateStr == null) continue;
-      final date = DateTime.tryParse(dateStr);
-      if (date == null) continue;
-      final key = fmt.format(date);
-      map.putIfAbsent(key, () => {'amount': 0, 'diff': 0});
-      map[key]!['amount'] = (map[key]!['amount']! + (e['amount'] as num? ?? 0));
-    }
-
-    final sortedKeys = map.keys.toList()
-      ..sort(
-        (a, b) => DateFormat(
-          'MMMM yyyy',
-        ).parse(b).compareTo(DateFormat('MMMM yyyy').parse(a)),
-      );
-
-    for (int i = 0; i < sortedKeys.length - 1; i++) {
-      final current = map[sortedKeys[i]]!['amount']!;
-      final previous = map[sortedKeys[i + 1]]!['amount']!;
-      map[sortedKeys[i]]!['diff'] = current - previous;
-    }
-
-    return Map.fromEntries(sortedKeys.map((key) => MapEntry(key, map[key]!)));
-  }
-
+  // --- Dialogues ---
   void _showFilterBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -586,133 +574,137 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                left: 16,
-                right: 16,
-                top: 16,
+      builder: (context) => _buildFilterBottomSheetContent(context),
+    );
+  }
+
+  Widget _buildFilterBottomSheetContent(BuildContext context) {
+    return StatefulBuilder(
+      builder: (context, setModalState) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Filtrer les dépenses',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 16),
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Description (contient)',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (val) {
+                  setState(() => _descriptionFilter = val.trim());
+                  setModalState(() {});
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  const Text(
-                    'Filtrer les dépenses',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Description (contient)',
-                      border: OutlineInputBorder(),
+                  Expanded(
+                    child: _buildDatePickerButton(
+                      context: context,
+                      label: _startDate == null
+                          ? 'Date début'
+                          : DateFormat('dd/MM/yyyy').format(_startDate!),
+                      onDateSelected: (picked) {
+                        setState(() => _startDate = picked);
+                        setModalState(() {});
+                      },
                     ),
-                    onChanged: (val) {
-                      setState(() => descriptionFilter = val.trim());
-                      setModalState(() {});
-                    },
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: startDate ?? DateTime.now(),
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2030),
-                            );
-                            if (picked != null && mounted) {
-                              setState(() => startDate = picked);
-                              setModalState(() {});
-                            }
-                          },
-                          child: Text(
-                            startDate == null
-                                ? 'Date début'
-                                : DateFormat('dd/MM/yyyy').format(startDate!),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: endDate ?? DateTime.now(),
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2030),
-                            );
-                            if (picked != null && mounted) {
-                              setState(() => endDate = picked);
-                              setModalState(() {});
-                            }
-                          },
-                          child: Text(
-                            endDate == null
-                                ? 'Date fin'
-                                : DateFormat('dd/MM/yyyy').format(endDate!),
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildDatePickerButton(
+                      context: context,
+                      label: _endDate == null
+                          ? 'Date fin'
+                          : DateFormat('dd/MM/yyyy').format(_endDate!),
+                      onDateSelected: (picked) {
+                        setState(() => _endDate = picked);
+                        setModalState(() {});
+                      },
+                    ),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade700,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            descriptionFilter = '';
-                            startDate = null;
-                            endDate = null;
-                          });
-                          setModalState(() {});
-                          Navigator.pop(context);
-                        },
-                        child: const Text('Réinitialiser'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Fermer'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
                 ],
               ),
-            );
-          },
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _descriptionFilter = '';
+                        _startDate = null;
+                        _endDate = null;
+                      });
+                      setModalState(() {});
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Réinitialiser'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Fermer'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         );
       },
     );
   }
 
-  void _showAddExpenseForm() {
+  Widget _buildDatePickerButton({
+    required BuildContext context,
+    required String label,
+    required ValueChanged<DateTime> onDateSelected,
+  }) {
+    return OutlinedButton(
+      onPressed: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2030),
+        );
+        if (picked != null) onDateSelected(picked);
+      },
+      child: Text(label),
+    );
+  }
+
+  // --- Méthodes pour les dialogues d'ajout/modification/suppression ---
+  Future<void> _showAddExpenseForm() async {
     final descriptionCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
     final categoryCtrl = TextEditingController();
     DateTime expenseDate = DateTime.now();
     bool paid = true;
 
-    showDialog(
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Ajouter une dépense'),
-          content: StatefulBuilder(
-            builder: (context, setDialogState) {
-              return SingleChildScrollView(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Ajouter une dépense'),
+              content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -761,19 +753,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: expenseDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          setDialogState(() => expenseDate = picked);
-                        }
-                      },
-                      child: Text(DateFormat('dd/MM/yyyy').format(expenseDate)),
+                    _buildDatePickerButton(
+                      context: context,
+                      label: DateFormat('dd/MM/yyyy').format(expenseDate),
+                      onDateSelected: (picked) =>
+                          setDialogState(() => expenseDate = picked),
                     ),
                     const SizedBox(height: 16),
                     SwitchListTile(
@@ -783,86 +767,32 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-
-                if (descriptionCtrl.text.trim().isEmpty ||
-                    amountCtrl.text.trim().isEmpty) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Description et montant obligatoires'),
-                      ),
-                    );
-                  }
-                  return;
-                }
-
-                try {
-                  final montantText = amountCtrl.text
-                      .trim()
-                      .replaceAll(',', '.')
-                      .replaceAll(' ', '');
-                  final amount = double.tryParse(montantText) ?? 0.0;
-
-                  if (amount <= 0) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Montant invalide (ex. 375000 ou 375.50)',
-                          ),
-                        ),
-                      );
-                    }
-                    return;
-                  }
-
-                  await supabase.from('expenses').insert({
-                    'description': descriptionCtrl.text.trim(),
-                    'amount': amount,
-                    'category': categoryCtrl.text.trim().isEmpty
-                        ? null
-                        : categoryCtrl.text.trim(),
-                    'created_at': expenseDate.toIso8601String(),
-                    'paid': paid,
-                    'locked': false,
-                  });
-
-                  if (mounted) {
-                    await _loadData();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Dépense ajoutée avec succès'),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Erreur ajout dépense : $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Enregistrer'),
-            ),
-          ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _handleAddExpenseSubmit(
+                    dialogContext: dialogContext,
+                    descriptionCtrl: descriptionCtrl,
+                    amountCtrl: amountCtrl,
+                    categoryCtrl: categoryCtrl,
+                    expenseDate: expenseDate,
+                    paid: paid,
+                  ),
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  void _showEditExpenseDialog(Map<String, dynamic> expense) {
+  Future<void> _showEditExpenseDialog(Map<String, dynamic> expense) async {
     final descriptionCtrl = TextEditingController(
       text: expense['description'] ?? '',
     );
@@ -875,14 +805,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     bool paid = expense['paid'] ?? true;
     bool locked = expense['locked'] ?? false;
 
-    showDialog(
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Modifier dépense'),
-          content: StatefulBuilder(
-            builder: (context, setDialogState) {
-              return SingleChildScrollView(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Modifier dépense'),
+              content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -931,19 +861,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: expenseDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          setDialogState(() => expenseDate = picked);
-                        }
-                      },
-                      child: Text(DateFormat('dd/MM/yyyy').format(expenseDate)),
+                    _buildDatePickerButton(
+                      context: context,
+                      label: DateFormat('dd/MM/yyyy').format(expenseDate),
+                      onDateSelected: (picked) =>
+                          setDialogState(() => expenseDate = picked),
                     ),
                     const SizedBox(height: 16),
                     SwitchListTile(
@@ -958,83 +880,28 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-
-                if (descriptionCtrl.text.trim().isEmpty ||
-                    amountCtrl.text.trim().isEmpty) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Description et montant obligatoires'),
-                      ),
-                    );
-                  }
-                  return;
-                }
-
-                try {
-                  final montantText = amountCtrl.text
-                      .trim()
-                      .replaceAll(',', '.')
-                      .replaceAll(' ', '');
-                  final amount = double.tryParse(montantText) ?? 0.0;
-
-                  if (amount <= 0) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Montant invalide (ex. 375000 ou 375.50)',
-                          ),
-                        ),
-                      );
-                    }
-                    return;
-                  }
-
-                  await supabase
-                      .from('expenses')
-                      .update({
-                        'description': descriptionCtrl.text.trim(),
-                        'amount': amount,
-                        'category': categoryCtrl.text.trim().isEmpty
-                            ? null
-                            : categoryCtrl.text.trim(),
-                        'created_at': expenseDate.toIso8601String(),
-                        'paid': paid,
-                        'locked': locked,
-                      })
-                      .eq('id', expense['id']);
-
-                  if (mounted) {
-                    await _loadData();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Dépense modifiée avec succès'),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Erreur modification : $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Modifier'),
-            ),
-          ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _handleEditExpenseSubmit(
+                    dialogContext: dialogContext,
+                    expense: expense,
+                    descriptionCtrl: descriptionCtrl,
+                    amountCtrl: amountCtrl,
+                    categoryCtrl: categoryCtrl,
+                    expenseDate: expenseDate,
+                    paid: paid,
+                    locked: locked,
+                  ),
+                  child: const Text('Modifier'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1064,7 +931,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     if (confirm != true) return;
 
     try {
-      await supabase.from('expenses').delete().eq('id', expense['id']);
+      await _supabase.from('expenses').delete().eq('id', expense['id']);
       if (mounted) {
         await _loadData();
         ScaffoldMessenger.of(
@@ -1073,9 +940,139 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur suppression : $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur suppression : ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  // --- Logique de soumission ---
+  Future<void> _handleAddExpenseSubmit({
+    required BuildContext dialogContext,
+    required TextEditingController descriptionCtrl,
+    required TextEditingController amountCtrl,
+    required TextEditingController categoryCtrl,
+    required DateTime expenseDate,
+    required bool paid,
+  }) async {
+    if (descriptionCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Description et montant obligatoires')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final montantText = amountCtrl.text
+          .trim()
+          .replaceAll(',', '.')
+          .replaceAll(' ', '');
+      final amount = double.tryParse(montantText) ?? 0.0;
+
+      if (amount <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Montant invalide (ex. 375000 ou 375.50)'),
+            ),
+          );
+        }
+        return;
+      }
+
+      await _supabase.from('expenses').insert({
+        'description': descriptionCtrl.text.trim(),
+        'amount': amount,
+        'category': categoryCtrl.text.trim().isEmpty
+            ? null
+            : categoryCtrl.text.trim(),
+        'created_at': expenseDate.toIso8601String(),
+        'paid': paid,
+        'locked': false,
+      });
+
+      if (mounted) {
+        await _loadData();
+        Navigator.pop(dialogContext);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dépense ajoutée avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur ajout : ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleEditExpenseSubmit({
+    required BuildContext dialogContext,
+    required Map<String, dynamic> expense,
+    required TextEditingController descriptionCtrl,
+    required TextEditingController amountCtrl,
+    required TextEditingController categoryCtrl,
+    required DateTime expenseDate,
+    required bool paid,
+    required bool locked,
+  }) async {
+    if (descriptionCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Description et montant obligatoires')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final montantText = amountCtrl.text
+          .trim()
+          .replaceAll(',', '.')
+          .replaceAll(' ', '');
+      final amount = double.tryParse(montantText) ?? 0.0;
+
+      if (amount <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Montant invalide (ex. 375000 ou 375.50)'),
+            ),
+          );
+        }
+        return;
+      }
+
+      await _supabase
+          .from('expenses')
+          .update({
+            'description': descriptionCtrl.text.trim(),
+            'amount': amount,
+            'category': categoryCtrl.text.trim().isEmpty
+                ? null
+                : categoryCtrl.text.trim(),
+            'created_at': expenseDate.toIso8601String(),
+            'paid': paid,
+            'locked': locked,
+          })
+          .eq('id', expense['id']);
+
+      if (mounted) {
+        await _loadData();
+        Navigator.pop(dialogContext);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dépense modifiée avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur modification : ${e.toString()}')),
+        );
       }
     }
   }
