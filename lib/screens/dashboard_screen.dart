@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
-// Correction : Suppression du caractère spécial et vérification du package
-import 'package:facil_count_nouveau/screens/cash_screen.dart'; 
+import 'package:facil_count_nouveau/screens/cash_screen.dart';
+import 'package:facil_count_nouveau/screens/stock_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -82,7 +82,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (end != null) query = query.lte(dateColumn, end.toIso8601String());
 
     final res = await query;
-    // Correction du fold pour éviter l'erreur FutureOr
     return (res as List).fold<double>(0.0, (sum, row) {
       final amount = (row['amount'] as num?)?.toDouble() ?? 0.0;
       return sum + amount;
@@ -133,6 +132,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return '$sign${formatter.format(amount.abs())} F CFA';
   }
 
+  String formatCompactCFA(double amount) {
+    if (amount >= 1000000) {
+      return '${(amount / 1000000).toStringAsFixed(1)} M';
+    } else if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(1)} K';
+    } else {
+      return formatCFA(amount);
+    }
+  }
+
   String _getPeriodLabel(String period) {
     switch (period) {
       case 'Semaine':
@@ -151,7 +160,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final periodLabel = _getPeriodLabel(_selectedPeriod);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
+      appBar: AppBar(title: const Text('Tableau de bord')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -162,6 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Sélecteur de période
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -194,16 +204,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _buildCompactCard('Achats', _totalAchats, Colors.blue)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildCompactCard('Ventes', _totalVentes, Colors.green)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildCompactCard('Dépenses', _totalDepenses, Colors.red)),
-                      ],
+                    // Cartes glissantes pour Achats, Ventes, Dépenses
+                    SizedBox(
+                      height: 140, // Hauteur fixe pour les cartes
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          const SizedBox(width: 8),
+                          _buildCompactCard('Achats', _totalAchats, Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          _buildCompactCard('Ventes', _totalVentes, Colors.green.shade700),
+                          const SizedBox(width: 8),
+                          _buildCompactCard('Dépenses', _totalDepenses, Colors.orange.shade700),
+                          const SizedBox(width: 8),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
+                    // Carte de la marge
                     Card(
                       elevation: 3,
                       color: _marge >= 0 ? Colors.green.shade50 : Colors.red.shade50,
@@ -233,6 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    // Graphique optimisé
                     Card(
                       elevation: 3,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -247,59 +266,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 12),
                             SizedBox(
-                              height: 220,
-                              child: _monthlyEvolution.isEmpty 
+                              height: 200,
+                              child: _monthlyEvolution.isEmpty
                                 ? const Center(child: Text("Pas de données"))
                                 : BarChart(
-                                  BarChartData(
-                                    alignment: BarChartAlignment.spaceAround,
-                                    maxY: _monthlyEvolution
-                                              .expand((m) => [m['achats'] ?? 0, m['ventes'] ?? 0, m['depenses'] ?? 0])
-                                              .reduce((a, b) => a > b ? a : b) * 1.3,
-                                    barTouchData: BarTouchData(enabled: true),
-                                    titlesData: FlTitlesData(
-                                      bottomTitles: AxisTitles(
-                                        sideTitles: SideTitles(
-                                          showTitles: true,
-                                          getTitlesWidget: (value, meta) {
-                                            final index = value.toInt();
-                                            if (index >= 0 && index < _monthlyEvolution.length) {
-                                              return Text(DateFormat('MMM', 'fr_FR').format(DateTime.now().subtract(Duration(days: 30 * (11 - index)))), style: const TextStyle(fontSize: 9));
-                                            }
-                                            return const SizedBox();
-                                          },
+                                    BarChartData(
+                                      alignment: BarChartAlignment.spaceAround,
+                                      maxY: _monthlyEvolution
+                                        .expand((m) => [m['achats'] ?? 0, m['ventes'] ?? 0, m['depenses'] ?? 0])
+                                        .reduce((a, b) => a > b ? a : b) * 1.3,
+                                      barTouchData: BarTouchData(enabled: true),
+                                      titlesData: FlTitlesData(
+                                        bottomTitles: AxisTitles(
+                                          sideTitles: SideTitles(
+                                            showTitles: true,
+                                            getTitlesWidget: (value, meta) {
+                                              final index = value.toInt();
+                                              if (index >= 0 && index < _monthlyEvolution.length) {
+                                                final month = DateTime.now().subtract(Duration(days: 30 * (11 - index)));
+                                                final monthAbbreviation = DateFormat('MMM', 'fr_FR').format(month).substring(0, 1);
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(top: 4),
+                                                  child: Text(
+                                                    monthAbbreviation,
+                                                    style: const TextStyle(fontSize: 10),
+                                                  ),
+                                                );
+                                              }
+                                              return const SizedBox();
+                                            },
+                                          ),
                                         ),
+                                        leftTitles: AxisTitles(
+                                          sideTitles: SideTitles(
+                                            showTitles: true,
+                                            reservedSize: 30,
+                                            getTitlesWidget: (value, meta) {
+                                              return Text(
+                                                formatCompactCFA(value),
+                                                style: const TextStyle(fontSize: 10),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                                       ),
-                                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
-                                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                      barGroups: List.generate(_monthlyEvolution.length, (i) {
+                                        final data = _monthlyEvolution[i];
+                                        return BarChartGroupData(
+                                          x: i,
+                                          barRods: [
+                                            BarChartRodData(
+                                              toY: data['achats'] ?? 0,
+                                              color: Colors.blue.shade700,
+                                              width: 8,
+                                              borderRadius: const BorderRadius.only(
+                                                topLeft: Radius.circular(4),
+                                                topRight: Radius.circular(4),
+                                              ),
+                                            ),
+                                            BarChartRodData(
+                                              toY: data['ventes'] ?? 0,
+                                              color: Colors.green.shade700,
+                                              width: 8,
+                                              borderRadius: const BorderRadius.only(
+                                                topLeft: Radius.circular(4),
+                                                topRight: Radius.circular(4),
+                                              ),
+                                            ),
+                                            BarChartRodData(
+                                              toY: data['depenses'] ?? 0,
+                                              color: Colors.orange.shade700,
+                                              width: 8,
+                                              borderRadius: const BorderRadius.only(
+                                                topLeft: Radius.circular(4),
+                                                topRight: Radius.circular(4),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      }),
                                     ),
-                                    barGroups: List.generate(_monthlyEvolution.length, (i) {
-                                      final data = _monthlyEvolution[i];
-                                      return BarChartGroupData(
-                                        x: i,
-                                        barRods: [
-                                          BarChartRodData(toY: data['achats'] ?? 0, color: Colors.blue, width: 6),
-                                          BarChartRodData(toY: data['ventes'] ?? 0, color: Colors.green, width: 6),
-                                          BarChartRodData(toY: data['depenses'] ?? 0, color: Colors.red, width: 6),
-                                        ],
-                                      );
-                                    }),
                                   ),
-                                ),
                             ),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 24),
-                    _buildProductList('Top 5 produits vendus', _bestSoldProducts, Colors.green),
+                    _buildProductList('Top 5 produits vendus', _bestSoldProducts, Colors.green.shade700),
                     const SizedBox(height: 16),
-                    _buildProductList('5 produits les moins vendus', _leastSoldProducts, Colors.red),
+                    _buildProductList('5 produits les moins vendus', _leastSoldProducts, Colors.red.shade700),
                     const SizedBox(height: 32),
+                    // Boutons de navigation
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
+                        _buildNavButton('Stock', Icons.inventory, Colors.purple, () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const StockScreen()));
+                        }),
                         _buildNavButton('Caisse', Icons.point_of_sale, Colors.indigo, () {
                           Navigator.push(context, MaterialPageRoute(builder: (_) => const CashScreen()));
                         }),
@@ -325,8 +391,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             ...products.map((p) => ListTile(
-              leading: CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Text("${(p['quantity'] as double).toInt()}", style: TextStyle(color: color))),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+              leading: CircleAvatar(
+                backgroundColor: color.withOpacity(0.1),
+                child: Text("${(p['quantity'] as double).toInt()}", style: TextStyle(color: color)),
+              ),
               title: Text(p['name'] as String),
+              trailing: Text("${(p['quantity'] as double).toInt()} vendus", style: TextStyle(color: Colors.grey.shade600)),
             )),
           ],
         ),
@@ -336,25 +407,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildNavButton(String label, IconData icon, Color color, VoidCallback onPressed) {
     return ElevatedButton.icon(
-      icon: Icon(icon),
+      icon: Icon(icon, size: 24),
       label: Text(label),
-      style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, minimumSize: const Size(140, 50)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(140, 50),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
       onPressed: onPressed,
     );
   }
 
   Widget _buildCompactCard(String title, double value, Color color) {
-    return Card(
-      elevation: 2,
-      color: color.withOpacity(0.08),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Text(title, style: const TextStyle(fontSize: 14)),
-            FittedBox(child: Text(formatCFA(value), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color))),
-          ],
+    return SizedBox(
+      width: 140, // Largeur fixe pour chaque carte
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                title,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 8),
+              FittedBox(
+                child: Text(
+                  formatCFA(value),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
