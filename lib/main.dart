@@ -10,6 +10,7 @@ import 'screens/purchases_screen.dart';
 import 'screens/sales_screen.dart';
 import 'screens/expenses_screen.dart';
 import 'screens/invoices_screen.dart';
+import 'screens/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -134,8 +135,9 @@ class FacilCountApp extends StatelessWidget {
         '/sales': (context) => const SalesScreen(),
         '/expenses': (context) => const ExpensesScreen(),
         '/invoices': (context) => const InvoicesScreen(),
+        '/login': (context) => const LoginScreen(),
       },
-      initialRoute: '/',
+      initialRoute: '/login',
     );
   }
 }
