@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:facil_count_nouveau/core/constants/app_colors.dart';
 import 'package:facil_count_nouveau/core/utils/format.dart';
+import 'package:intl/intl.dart';
 
 class CompactCard extends StatelessWidget {
   final String title; // Nom du produit ou description
@@ -239,4 +240,102 @@ class CompactExpenseCard extends CompactCard {
          backgroundColor: Colors.orange.shade50, // Fond orange clair
          showQuantityCircle: false, // Masquer le cercle pour les dépenses
        );
+}
+
+class AnnualDashboardCard extends StatelessWidget {
+  final String month; // ex: "mars 2026"
+  final double amount; // montant actuel
+  final double previousAmount; // montant précédent
+  final bool isIncrease; // true = hausse, false = baisse
+  final Color amountColor; // couleur du montant principal
+  final Color backgroundColor; // fond de la carte
+
+  const AnnualDashboardCard({
+    super.key,
+    required this.month,
+    required this.amount,
+    required this.previousAmount,
+    required this.isIncrease,
+    required this.amountColor,
+    required this.backgroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat.currency(
+      locale: 'fr_FR',
+      symbol: 'F CFA',
+      decimalDigits: 0,
+    );
+
+    final difference = amount - previousAmount;
+    final diffPercentage = previousAmount != 0
+        ? (difference / previousAmount) * 100
+        : 0.0;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: backgroundColor,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Mois + année
+            Text(
+              month.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Montant principal
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                formatter.format(amount),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: amountColor,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Différence + pourcentage
+            Row(
+              children: [
+                Icon(
+                  isIncrease ? Icons.arrow_upward : Icons.arrow_downward,
+                  color: isIncrease
+                      ? Colors.green.shade700
+                      : Colors.red.shade700,
+                  size: 20,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  previousAmount != 0
+                      ? '${formatter.format(difference.abs())} (${diffPercentage.toStringAsFixed(1)}%)'
+                      : 'Pas de données précédentes',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isIncrease
+                        ? Colors.green.shade700
+                        : Colors.red.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
