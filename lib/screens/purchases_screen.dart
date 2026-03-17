@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:facil_count_nouveau/core/services/supabase_service.dart';
+import 'package:facil_count_nouveau/core/widgets/compact_card.dart';
+import 'package:facil_count_nouveau/core/utils/format.dart';
 
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({super.key});
@@ -214,13 +216,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final map = <String, Map<String, num>>{};
     final fmt = DateFormat('MMMM yyyy', 'fr_FR');
 
+    // Utiliser un Set pour éviter les doublons
+    final uniqueEntries = <String>{};
+
     for (var p in _purchases) {
       final dateStr = p['purchase_date'] as String?;
       if (dateStr == null) continue;
       final date = DateTime.tryParse(dateStr);
       if (date == null) continue;
       final key = fmt.format(date);
-      map.putIfAbsent(key, () => {'amount': 0, 'diff': 0});
+
+      // Vérifier si la clé est déjà présente
+      if (!uniqueEntries.contains(key)) {
+        uniqueEntries.add(key);
+        map[key] = {'amount': 0, 'diff': 0};
+      }
+
       map[key]!['amount'] =
           (map[key]!['amount']! + (p['amount'] as num? ?? 0)) as num;
     }
@@ -523,115 +534,89 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Widget _buildCompactAnnualDashboard() {
     final monthlyTotals = _getMonthlyTotalsWithDiff();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildMonthlyTotalCard(),
-          const SizedBox(height: 24),
+          // Carte pour le total des achats du mois
+          Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            color: const Color(0xFFE3F2FD),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  const Text(
+                    'Achats du mois',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      formatCFA(_totalMoisActuel),
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1565C0),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _difference >= 0
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward,
+                        color: _getDiffColor(_difference),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${formatCFA(_difference.abs())} vs mois préc.',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: _getDiffColor(_difference),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Cartes mensuelles avec AnnualDashboardCard
           ...monthlyTotals.entries.map((entry) {
             final month = entry.key;
             final amount = entry.value['amount'] as num;
             final diff = entry.value['diff'] as num;
+            final isIncrease = diff >= 0;
             final diffColor = _getDiffColor(diff.toDouble());
-            return _buildMonthlySummaryCard(month, amount, diff, diffColor);
-          }),
+
+            return AnnualDashboardCard(
+              month: month.toUpperCase(),
+              amount: amount.toDouble(),
+              previousAmount: (amount - diff).toDouble(),
+              isIncrease: isIncrease,
+              amountColor: diffColor,
+              backgroundColor: const Color(0xFFE3F2FD),
+            );
+          }).toList(),
         ],
       ),
     );
   }
 
-  Widget _buildMonthlyTotalCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: Colors.blue.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            const Text(
-              'Achats du mois',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                _formatCFA(_totalMoisActuel),
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade800,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _difference >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                  color: _getDiffColor(_difference),
-                  size: 20,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${_formatCFA(_difference.abs())} vs mois préc.',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: _getDiffColor(_difference),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMonthlySummaryCard(
-    String month,
-    num amount,
-    num diff,
-    Color diffColor,
-  ) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: ListTile(
-        dense: true,
-        title: Text(month, style: const TextStyle(fontSize: 15)),
-        trailing: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              _formatCFA(amount),
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              diff > 0
-                  ? '+${_formatCFA(diff)} vs préc.'
-                  : diff < 0
-                  ? '${_formatCFA(diff)} vs préc.'
-                  : '0 vs préc.',
-              style: TextStyle(
-                fontSize: 12,
-                color: diffColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- Dialogues ---
   void _showFilterBottomSheet() {
     showModalBottomSheet(
       context: context,

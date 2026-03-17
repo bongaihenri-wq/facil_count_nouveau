@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:facil_count_nouveau/core/constants/app_colors.dart';
 import 'package:facil_count_nouveau/core/services/supabase_service.dart';
+import 'package:facil_count_nouveau/core/widgets/compact_card.dart';
+import 'package:facil_count_nouveau/core/utils/format.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -518,49 +520,24 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               ),
             ),
           ),
+
           const SizedBox(height: 24),
           ...monthlyTotals.entries.map((entry) {
             final month = entry.key;
             final amount = entry.value['amount'] as num;
             final diff = entry.value['diff'] as num;
+            final isIncrease = diff >= 0;
             final diffColor = _getDiffColor(diff.toDouble());
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: ListTile(
-                dense: true,
-                title: Text(month, style: const TextStyle(fontSize: 15)),
-                trailing: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      _formatCFA(amount),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      diff > 0
-                          ? '+${_formatCFA(diff)} vs préc.'
-                          : diff < 0
-                          ? '${_formatCFA(diff)} vs préc.'
-                          : '0 vs préc.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: diffColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
+            return AnnualDashboardCard(
+              month: month.toUpperCase(),
+              amount: amount.toDouble(),
+              previousAmount: (amount - diff).toDouble(),
+              isIncrease: isIncrease,
+              amountColor: diffColor,
+              backgroundColor: const Color(0xFFE3F2FD),
             );
-          }),
+          }).toList(),
         ],
       ),
     );

@@ -243,95 +243,98 @@ class CompactExpenseCard extends CompactCard {
 }
 
 class AnnualDashboardCard extends StatelessWidget {
-  final String month; // ex: "mars 2026"
-  final double amount; // montant actuel
-  final double previousAmount; // montant précédent
-  final bool isIncrease; // true = hausse, false = baisse
-  final Color amountColor; // couleur du montant principal
-  final Color backgroundColor; // fond de la carte
+  final String month;
+  final double amount;
+  final double previousAmount;
+  final bool isIncrease;
+  final Color amountColor;
+  final Color backgroundColor;
 
   const AnnualDashboardCard({
-    super.key,
+    Key? key,
     required this.month,
     required this.amount,
     required this.previousAmount,
     required this.isIncrease,
     required this.amountColor,
     required this.backgroundColor,
-  });
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final formatter = NumberFormat.currency(
-      locale: 'fr_FR',
-      symbol: 'F CFA',
-      decimalDigits: 0,
-    );
-
     final difference = amount - previousAmount;
     final diffPercentage = previousAmount != 0
         ? (difference / previousAmount) * 100
         : 0.0;
 
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: backgroundColor,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
           children: [
-            // Mois + année
-            Text(
-              month.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Montant principal
-            FittedBox(
-              fit: BoxFit.scaleDown,
+            // Mois à gauche
+            Expanded(
+              flex: 2,
               child: Text(
-                formatter.format(amount),
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: amountColor,
+                month,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            const SizedBox(height: 8),
 
-            // Différence + pourcentage
-            Row(
-              children: [
-                Icon(
-                  isIncrease ? Icons.arrow_upward : Icons.arrow_downward,
-                  color: isIncrease
-                      ? Colors.green.shade700
-                      : Colors.red.shade700,
-                  size: 20,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  previousAmount != 0
-                      ? '${formatter.format(difference.abs())} (${diffPercentage.toStringAsFixed(1)}%)'
-                      : 'Pas de données précédentes',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isIncrease
-                        ? Colors.green.shade700
-                        : Colors.red.shade700,
+            // Montant et variations à droite
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Montant principal
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      formatCFA(amount),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: amountColor,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+
+                  // Différence + pourcentage
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Icon(
+                          isIncrease
+                              ? Icons.arrow_upward
+                              : Icons.arrow_downward,
+                          color: isIncrease ? Colors.green : Colors.red,
+                          size: 12,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${formatCFA(difference.abs())} (${diffPercentage.toStringAsFixed(1)}%)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: isIncrease ? Colors.green : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

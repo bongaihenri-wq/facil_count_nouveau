@@ -415,16 +415,18 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildCompactAnnualDashboard() {
     final monthlyTotals = _getMonthlyTotalsWithDiff();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          // Carte pour le total des ventes du mois
           Card(
             elevation: 3,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            color: AppColors.salesLight.withOpacity(0.5),
+            color: Colors.green[50],
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -441,7 +443,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.salesPrimary,
+                        color: Colors.green[800],
                       ),
                     ),
                   ),
@@ -471,49 +473,34 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
           ),
+          AnnualDashboardCard(
+            month: "mars 2026",
+            amount: 123400.0,
+            previousAmount: 10000.0,
+            isIncrease: true,
+            amountColor: const Color(0xFF2E7D32), // Vert foncé
+            backgroundColor: const Color(0xFFE8F5E9), // Vert clair
+          ),
+
           const SizedBox(height: 24),
+
+          // Cartes mensuelles avec AnnualDashboardCard
           ...monthlyTotals.entries.map((entry) {
             final month = entry.key;
             final amount = entry.value['amount'] as num;
             final diff = entry.value['diff'] as num;
+            final isIncrease = diff >= 0;
             final diffColor = _getDiffColor(diff.toDouble());
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: ListTile(
-                dense: true,
-                title: Text(month, style: const TextStyle(fontSize: 15)),
-                trailing: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatCFA(amount),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      diff > 0
-                          ? '+${formatCFA(diff)} vs préc.'
-                          : diff < 0
-                          ? '${formatCFA(diff)} vs préc.'
-                          : '0 vs préc.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: diffColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
+            return AnnualDashboardCard(
+              month: month.toUpperCase(),
+              amount: amount.toDouble(),
+              previousAmount: (amount - diff).toDouble(),
+              isIncrease: isIncrease,
+              amountColor: diffColor,
+              backgroundColor: Colors.green[50]!,
             );
-          }),
+          }).toList(),
         ],
       ),
     );
