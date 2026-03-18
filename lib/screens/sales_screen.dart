@@ -473,14 +473,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
           ),
-          AnnualDashboardCard(
-            month: "mars 2026",
-            amount: 123400.0,
-            previousAmount: 10000.0,
-            isIncrease: true,
-            amountColor: const Color(0xFF2E7D32), // Vert foncé
-            backgroundColor: const Color(0xFFE8F5E9), // Vert clair
-          ),
 
           const SizedBox(height: 24),
 

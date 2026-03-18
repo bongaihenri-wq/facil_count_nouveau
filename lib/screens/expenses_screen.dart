@@ -15,7 +15,6 @@ class ExpensesScreen extends StatefulWidget {
 }
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
-  // --- 1. Initialisation ---
   final _api = SupabaseService();
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
@@ -40,11 +39,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Chargement des dépenses
       final expensesRes = await _api.getExpenses();
       setState(() => _expenses = expensesRes);
-
-      // Calcul des totaux mensuels
       await _calculateMonthlyTotals();
     } catch (e) {
       if (mounted) {
@@ -64,7 +60,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final firstDayOfPreviousMonth = DateTime(now.year, now.month - 1, 1);
     final lastDayOfPreviousMonth = DateTime(now.year, now.month, 0, 23, 59, 59);
 
-    // Utilisation de _getTotalLocal pour éviter les erreurs d'API
     _totalMoisActuel = await _getTotalLocal(firstDayOfMonth, lastDayOfMonth);
     _totalMoisPrecedent = await _getTotalLocal(
       firstDayOfPreviousMonth,
@@ -73,14 +68,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     _difference = _totalMoisActuel - _totalMoisPrecedent;
   }
 
-  // Méthode locale pour calculer les totaux (remplace _api.getTotalExpensesByPeriod)
   Future<double> _getTotalLocal(DateTime start, DateTime end) async {
     try {
       final res = await _supabase
           .from('expenses')
           .select('amount')
-          .gte('created_at', start.toIso8601String())
-          .lte('created_at', end.toIso8601String());
+          .gte('expenses_date', start.toIso8601String())
+          .lte('expenses_date', end.toIso8601String());
 
       return res.fold<double>(
         0.0,
@@ -91,7 +85,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
   }
 
-  // --- 2. Logique de filtrage ---
   List<Map<String, dynamic>> get _filteredExpenses {
     var list = List<Map<String, dynamic>>.from(_expenses);
     final now = DateTime.now();
@@ -110,7 +103,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
 
     list = list.where((e) {
-      final dateStr = e['created_at'] as String?;
+      final dateStr = e['expenses_date'] as String?;
       if (dateStr == null) return false;
       final date = DateTime.tryParse(dateStr);
       return date != null &&
@@ -122,16 +115,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       final q = _descriptionFilter.toLowerCase();
       list = list
           .where(
-            (e) =>
-                (e['description'] as String?)?.toLowerCase().contains(q) ??
-                false,
+            (e) => (e['name'] as String?)?.toLowerCase().contains(q) ?? false,
           )
           .toList();
     }
 
     if (_startDate != null || _endDate != null) {
       list = list.where((e) {
-        final date = DateTime.tryParse(e['created_at'] ?? '');
+        final date = DateTime.tryParse(e['expenses_date'] ?? '');
         if (date == null) return false;
         if (_startDate != null && date.isBefore(_startDate!)) return false;
         if (_endDate != null && date.isAfter(_endDate!)) return false;
@@ -140,18 +131,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
 
     list.sort((a, b) {
-      final da = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime(2000);
-      final db = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime(2000);
+      final da = DateTime.tryParse(a['expenses_date'] ?? '') ?? DateTime(2000);
+      final db = DateTime.tryParse(b['expenses_date'] ?? '') ?? DateTime(2000);
       return db.compareTo(da);
     });
 
     return list;
-  }
-
-  // --- 3. UI Helpers ---
-  String _formatCFA(num amount) {
-    final formatter = NumberFormat('#,###', 'fr_FR');
-    return '${formatter.format(amount.abs())} F CFA';
   }
 
   Color _getDiffColor(double diff) {
@@ -165,7 +150,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final fmt = DateFormat('MMMM yyyy', 'fr_FR');
 
     for (var e in _expenses) {
-      final dateStr = e['created_at'] as String?;
+      final dateStr = e['expenses_date'] as String?;
       if (dateStr == null) continue;
       final date = DateTime.tryParse(dateStr);
       if (date == null) continue;
@@ -187,7 +172,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return Map.fromEntries(sortedKeys.map((key) => MapEntry(key, map[key]!)));
   }
 
-  // --- 4. UI Build ---
   @override
   Widget build(BuildContext context) {
     final total = _filteredExpenses.fold<num>(
@@ -222,7 +206,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Onglets
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -237,7 +220,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ],
                   ),
                 ),
-                // Contenu selon l'onglet
                 if (_selectedTab == 'Liste') ...[
                   _buildTotalCard(total, isSmall),
                   _buildPeriodFilterChips(),
@@ -256,7 +238,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  // --- Widgets UI ---
   Widget _buildTabButton(String label, bool selected) {
     return GestureDetector(
       onTap: () => setState(() => _selectedTab = label),
@@ -296,7 +277,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  _formatCFA(total),
+                  formatCFA(total),
                   style: TextStyle(
                     fontSize: isSmall ? 17 : 19,
                     fontWeight: FontWeight.bold,
@@ -349,17 +330,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       itemCount: displayedList.length,
       itemBuilder: (context, index) {
         final e = displayedList[index];
-        final desc = e['description'] as String? ?? 'Sans description';
+        final name = e['name'] as String? ?? 'Sans nom';
+        final recipient = e['recipient'] as String? ?? 'Sans destinataire';
         final amount = e['amount'] as num? ?? 0.0;
         final locked = e['locked'] == true;
-        return _buildExpenseCard(e, desc, amount, locked);
+        return _buildExpenseCard(e, name, recipient, amount, locked);
       },
     );
   }
 
   Widget _buildExpenseCard(
     Map<String, dynamic> e,
-    String desc,
+    String name,
+    String recipient,
     num amount,
     bool locked,
   ) {
@@ -375,17 +358,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             CircleAvatar(
               radius: 20,
               backgroundColor: Colors.orange.shade100,
-              child: Text(
-                '1',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade800,
-                ),
+              child: const Icon(
+                Icons.money_off,
+                color: Colors.orange,
+                size: 20,
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(child: _buildExpenseInfo(e, desc)),
+            Expanded(child: _buildExpenseInfo(e, name, recipient)),
             SizedBox(
               width: 140,
               child: _buildExpenseActions(e, amount, locked),
@@ -396,13 +376,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  Widget _buildExpenseInfo(Map<String, dynamic> e, String desc) {
+  Widget _buildExpenseInfo(
+    Map<String, dynamic> e,
+    String name,
+    String recipient,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          desc,
-          maxLines: 2,
+          name,
+          maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 13,
@@ -413,7 +397,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         ),
         const SizedBox(height: 2),
         Text(
-          e['created_at']?.substring(0, 10) ?? '',
+          recipient,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          e['expenses_date']?.substring(0, 10) ?? '',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
       ],
@@ -425,7 +416,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
-          _formatCFA(amount),
+          formatCFA(amount),
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
@@ -486,7 +477,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      _formatCFA(_totalMoisActuel),
+                      formatCFA(_totalMoisActuel),
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.bold,
@@ -507,7 +498,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        '${_formatCFA(_difference.abs())} vs mois préc.',
+                        '${formatCFA(_difference.abs())} vs mois préc.',
                         style: TextStyle(
                           fontSize: 15,
                           color: _getDiffColor(_difference),
@@ -520,7 +511,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 24),
           ...monthlyTotals.entries.map((entry) {
             final month = entry.key;
@@ -535,7 +525,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               previousAmount: (amount - diff).toDouble(),
               isIncrease: isIncrease,
               amountColor: diffColor,
-              backgroundColor: const Color(0xFFE3F2FD),
+              backgroundColor: Colors.orange.shade50,
             );
           }).toList(),
         ],
@@ -543,7 +533,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  // --- Dialogues ---
   void _showFilterBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -576,7 +565,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               const SizedBox(height: 16),
               TextField(
                 decoration: const InputDecoration(
-                  labelText: 'Description (contient)',
+                  labelText: 'Nom (contient)',
                   border: OutlineInputBorder(),
                 ),
                 onChanged: (val) {
@@ -666,13 +655,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  // --- Méthodes pour les dialogues d'ajout/modification/suppression ---
   Future<void> _showAddExpenseForm() async {
-    final descriptionCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
-    final categoryCtrl = TextEditingController();
+    final recipientCtrl = TextEditingController();
     DateTime expenseDate = DateTime.now();
-    bool paid = true;
+    bool locked = false;
 
     await showDialog<void>(
       context: context,
@@ -686,9 +674,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
-                      controller: descriptionCtrl,
+                      controller: nameCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Description *',
+                        labelText: 'Nom *',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -723,135 +711,32 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: categoryCtrl,
+                      controller: recipientCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Catégorie (optionnel)',
+                        labelText: 'Destinataire',
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _buildDatePickerButton(
-                      context: context,
-                      label: DateFormat('dd/MM/yyyy').format(expenseDate),
-                      onDateSelected: (picked) =>
-                          setDialogState(() => expenseDate = picked),
-                    ),
-                    const SizedBox(height: 16),
-                    SwitchListTile(
-                      title: const Text('Payé (cash)'),
-                      value: paid,
-                      onChanged: (val) => setDialogState(() => paid = val),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Annuler'),
-                ),
-                ElevatedButton(
-                  onPressed: () => _handleAddExpenseSubmit(
-                    dialogContext: dialogContext,
-                    descriptionCtrl: descriptionCtrl,
-                    amountCtrl: amountCtrl,
-                    categoryCtrl: categoryCtrl,
-                    expenseDate: expenseDate,
-                    paid: paid,
-                  ),
-                  child: const Text('Enregistrer'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _showEditExpenseDialog(Map<String, dynamic> expense) async {
-    final descriptionCtrl = TextEditingController(
-      text: expense['description'] ?? '',
-    );
-    final amountCtrl = TextEditingController(
-      text: expense['amount'].toString(),
-    );
-    final categoryCtrl = TextEditingController(text: expense['category'] ?? '');
-    DateTime expenseDate =
-        DateTime.tryParse(expense['created_at'] ?? '') ?? DateTime.now();
-    bool paid = expense['paid'] ?? true;
-    bool locked = expense['locked'] ?? false;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Modifier dépense'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: descriptionCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Description *',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: amountCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Montant *',
-                        border: OutlineInputBorder(),
-                        hintText: 'Exemple : 375000 ou 375.50',
-                        helperText: 'Utilisez le point (.) pour les décimales',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d*\.?\d{0,2}'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        final cleaned = value.replaceAll(',', '.');
-                        if (cleaned != value) {
-                          amountCtrl.value = amountCtrl.value.copyWith(
-                            text: cleaned,
-                            selection: TextSelection.collapsed(
-                              offset: cleaned.length,
-                            ),
-                          );
+                    OutlinedButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: expenseDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => expenseDate = picked);
                         }
                       },
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: categoryCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Catégorie (optionnel)',
-                        border: OutlineInputBorder(),
+                      child: Text(
+                        'Date: ${DateFormat('dd/MM/yyyy').format(expenseDate)}',
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _buildDatePickerButton(
-                      context: context,
-                      label: DateFormat('dd/MM/yyyy').format(expenseDate),
-                      onDateSelected: (picked) =>
-                          setDialogState(() => expenseDate = picked),
-                    ),
-                    const SizedBox(height: 16),
                     SwitchListTile(
-                      title: const Text('Payé (cash)'),
-                      value: paid,
-                      onChanged: (val) => setDialogState(() => paid = val),
-                    ),
-                    SwitchListTile(
-                      title: const Text('Verrouillé'),
+                      title: const Text('Verrouiller'),
                       value: locked,
                       onChanged: (val) => setDialogState(() => locked = val),
                     ),
@@ -864,17 +749,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   child: const Text('Annuler'),
                 ),
                 ElevatedButton(
-                  onPressed: () => _handleEditExpenseSubmit(
+                  onPressed: () => _handleAddExpenseSubmit(
                     dialogContext: dialogContext,
-                    expense: expense,
-                    descriptionCtrl: descriptionCtrl,
+                    nameCtrl: nameCtrl,
                     amountCtrl: amountCtrl,
-                    categoryCtrl: categoryCtrl,
+                    recipientCtrl: recipientCtrl,
                     expenseDate: expenseDate,
-                    paid: paid,
                     locked: locked,
                   ),
-                  child: const Text('Modifier'),
+                  child: const Text('Enregistrer'),
                 ),
               ],
             );
@@ -884,59 +767,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  Future<void> _deleteExpense(Map<String, dynamic> expense) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer dépense ?'),
-        content: Text(
-          'Voulez-vous supprimer cette dépense du ${expense['created_at']?.substring(0, 10) ?? 'date inconnue'} ?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      await _supabase.from('expenses').delete().eq('id', expense['id']);
-      if (mounted) {
-        await _loadData();
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Dépense supprimée')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur suppression : ${e.toString()}')),
-        );
-      }
-    }
-  }
-
-  // --- Logique de soumission ---
   Future<void> _handleAddExpenseSubmit({
     required BuildContext dialogContext,
-    required TextEditingController descriptionCtrl,
+    required TextEditingController nameCtrl,
     required TextEditingController amountCtrl,
-    required TextEditingController categoryCtrl,
+    required TextEditingController recipientCtrl,
     required DateTime expenseDate,
-    required bool paid,
+    required bool locked,
   }) async {
-    if (descriptionCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+    if (nameCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Description et montant obligatoires')),
+          const SnackBar(content: Text('Nom et montant obligatoires')),
         );
       }
       return;
@@ -961,14 +803,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       }
 
       await _supabase.from('expenses').insert({
-        'description': descriptionCtrl.text.trim(),
+        'name': nameCtrl.text.trim(),
         'amount': amount,
-        'category': categoryCtrl.text.trim().isEmpty
+        'recipient': recipientCtrl.text.trim().isEmpty
             ? null
-            : categoryCtrl.text.trim(),
-        'created_at': expenseDate.toIso8601String(),
-        'paid': paid,
-        'locked': false,
+            : recipientCtrl.text.trim(),
+        'expenses_date': expenseDate.toIso8601String(),
+        'locked': locked,
       });
 
       if (mounted) {
@@ -987,20 +828,137 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
   }
 
+  Future<void> _showEditExpenseDialog(Map<String, dynamic> expense) async {
+    final nameCtrl = TextEditingController(text: expense['name'] ?? '');
+    final amountCtrl = TextEditingController(
+      text: expense['amount'].toString(),
+    );
+    final recipientCtrl = TextEditingController(
+      text: expense['recipient'] ?? '',
+    );
+    DateTime expenseDate =
+        DateTime.tryParse(expense['expenses_date'] ?? '') ?? DateTime.now();
+    bool locked = expense['locked'] ?? false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Modifier dépense'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nom *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Montant *',
+                        border: OutlineInputBorder(),
+                        hintText: 'Exemple : 375000 ou 375.50',
+                        helperText: 'Utilisez le point (.) pour les décimales',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        final cleaned = value.replaceAll(',', '.');
+                        if (cleaned != value) {
+                          amountCtrl.value = amountCtrl.value.copyWith(
+                            text: cleaned,
+                            selection: TextSelection.collapsed(
+                              offset: cleaned.length,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: recipientCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Destinataire',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: expenseDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => expenseDate = picked);
+                        }
+                      },
+                      child: Text(
+                        'Date: ${DateFormat('dd/MM/yyyy').format(expenseDate)}',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      title: const Text('Verrouiller'),
+                      value: locked,
+                      onChanged: (val) => setDialogState(() => locked = val),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _handleEditExpenseSubmit(
+                    dialogContext: dialogContext,
+                    expense: expense,
+                    nameCtrl: nameCtrl,
+                    amountCtrl: amountCtrl,
+                    recipientCtrl: recipientCtrl,
+                    expenseDate: expenseDate,
+                    locked: locked,
+                  ),
+                  child: const Text('Modifier'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _handleEditExpenseSubmit({
     required BuildContext dialogContext,
     required Map<String, dynamic> expense,
-    required TextEditingController descriptionCtrl,
+    required TextEditingController nameCtrl,
     required TextEditingController amountCtrl,
-    required TextEditingController categoryCtrl,
+    required TextEditingController recipientCtrl,
     required DateTime expenseDate,
-    required bool paid,
     required bool locked,
   }) async {
-    if (descriptionCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+    if (nameCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Description et montant obligatoires')),
+          const SnackBar(content: Text('Nom et montant obligatoires')),
         );
       }
       return;
@@ -1027,13 +985,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       await _supabase
           .from('expenses')
           .update({
-            'description': descriptionCtrl.text.trim(),
+            'name': nameCtrl.text.trim(),
             'amount': amount,
-            'category': categoryCtrl.text.trim().isEmpty
+            'recipient': recipientCtrl.text.trim().isEmpty
                 ? null
-                : categoryCtrl.text.trim(),
-            'created_at': expenseDate.toIso8601String(),
-            'paid': paid,
+                : recipientCtrl.text.trim(),
+            'expenses_date': expenseDate.toIso8601String(),
             'locked': locked,
           })
           .eq('id', expense['id']);
@@ -1049,6 +1006,47 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur modification : ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteExpense(Map<String, dynamic> expense) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer dépense ?'),
+        content: Text(
+          'Voulez-vous supprimer cette dépense du ${expense['expenses_date']?.substring(0, 10) ?? 'date inconnue'} ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await _supabase.from('expenses').delete().eq('id', expense['id']);
+
+      if (mounted) {
+        await _loadData();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dépense supprimée avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur suppression : ${e.toString()}')),
         );
       }
     }
