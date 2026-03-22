@@ -3,12 +3,15 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'presentation/screens/expenses/expense_screen.dart';
+import 'presentation/screens/sales/sale_screen.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/purchases_screen.dart';
-import 'screens/sales_screen.dart';
-import 'screens/expenses_screen.dart';
+//import 'screens/sales_screen.dart';
+// import 'screens/expenses_screen.dart';
 import 'screens/invoices_screen.dart';
 import 'screens/login_screen.dart';
 
@@ -43,14 +46,14 @@ Future<void> main() async {
     debug: false,
   );
 
-  runApp(const FacilCountApp());
+  runApp(ProviderScope(child: const FacilCountApp()));
 }
 
-class FacilCountApp extends StatelessWidget {
+class FacilCountApp extends ConsumerWidget {
   const FacilCountApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'Facil Count',
       debugShowCheckedModeBanner: false,
@@ -132,12 +135,14 @@ class FacilCountApp extends StatelessWidget {
         '/': (context) => const HomeScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/purchases': (context) => const PurchasesScreen(),
-        '/sales': (context) => const SalesScreen(),
-        '/expenses': (context) => const ExpensesScreen(),
+        //'/sales': (context) => const SalesScreen(),
+        //'/expenses': (context) => const ExpensesScreen(),
         '/invoices': (context) => const InvoicesScreen(),
         '/login': (context) => const LoginScreen(),
+        '/expenses': (context) => const ExpenseScreen(),
+        '/sales': (context) => const SaleScreen(),
       },
-      initialRoute: '/login',
+      initialRoute: '/',
     );
   }
 }
