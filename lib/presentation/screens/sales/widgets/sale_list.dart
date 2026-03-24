@@ -1,34 +1,66 @@
+import 'package:facil_count_nouveau/core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../data/models/sale_model.dart';
-import '/presentation/providers/sale_provider.dart';
+import '../../../providers/sale_provider.dart';
 import 'sale_card.dart';
+import '../dialogs/edit_sale_dialog.dart';
+import '../../../providers/product_provider.dart';
+
+// Provider pour la période sélectionnée
+final selectedPeriodProvider = StateProvider<String>((ref) => 'Mois');
 
 class SaleList extends ConsumerWidget {
   final List<SaleModel> sales;
 
   const SaleList({super.key, required this.sales});
 
+  List<SaleModel> _filterByPeriod(List<SaleModel> sales, String period) {
+    final now = DateTime.now();
+
+    return sales.where((sale) {
+      switch (period) {
+        case 'Semaine':
+          final weekAgo = now.subtract(const Duration(days: 7));
+          return sale.saleDate.isAfter(weekAgo);
+        case 'Mois':
+          return sale.saleDate.month == now.month &&
+              sale.saleDate.year == now.year;
+        case 'Année':
+          return sale.saleDate.year == now.year;
+        default:
+          return true;
+      }
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (sales.isEmpty) {
+    final selectedPeriod = ref.watch(selectedPeriodProvider);
+    final allSales = ref.watch(filteredSalesProvider);
+    final filteredSales = _filterByPeriod(allSales, selectedPeriod);
+
+    if (filteredSales.isEmpty) {
       return const Center(child: Text('Aucune vente trouvée'));
     }
 
-    final total = sales.fold<double>(0, (sum, s) => sum + s.amount);
+    final total = filteredSales.fold<double>(0, (sum, s) => sum + s.amount);
 
     return Column(
       children: [
-        // CARTE TOTAL IDENTIQUE À DÉPENSES
+        // Carte Total
         _buildTotalCard(total),
+        // Filtres période
+        _buildPeriodFilterChips(ref, selectedPeriod),
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-            itemCount: sales.length,
+            itemCount: filteredSales.length,
             itemBuilder: (context, index) => SaleCard(
-              sale: sales[index],
-              onEdit: () => _showEditDialog(context, ref, sales[index]),
-              onDelete: () => _confirmDelete(context, ref, sales[index]),
+              sale: filteredSales[index],
+              onEdit: () => _showEditDialog(context, ref, filteredSales[index]),
+              onDelete: () =>
+                  _confirmDelete(context, ref, filteredSales[index]),
             ),
           ),
         ),
@@ -36,7 +68,6 @@ class SaleList extends ConsumerWidget {
     );
   }
 
-  // IDENTIQUE À EXPENSES
   Widget _buildTotalCard(double total) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -56,7 +87,8 @@ class SaleList extends ConsumerWidget {
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  '${total.toStringAsFixed(0)} CFA',
+                  // ✅ CORRIGÉ : Un seul argument
+                  Formatters.formatCurrency(total),
                   style: TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.bold,
@@ -71,48 +103,88 @@ class SaleList extends ConsumerWidget {
     );
   }
 
-  void _showEditDialog(BuildContext context, WidgetRef ref, SaleModel sale) {
-    // TODO: Implémenter édition
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Modifier (à implémenter)'),
-        content: Text(sale.productName ?? 'Vente'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
+  // Filtres période
+  Widget _buildPeriodFilterChips(WidgetRef ref, String selectedPeriod) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: ['Semaine', 'Mois', 'Année'].map((period) {
+            final isSelected = period == selectedPeriod;
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: FilterChip(
+                label: Text(period, style: const TextStyle(fontSize: 13)),
+                selected: isSelected,
+                onSelected: (_) =>
+                    ref.read(selectedPeriodProvider.notifier).state = period,
+                selectedColor: Colors.green.shade700,
+                backgroundColor: Colors.grey.shade200,
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.white : Colors.black87,
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, SaleModel sale) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Supprimer vente ?'),
-        content: Text(
-          '${sale.productName} - ${sale.formattedAmount}\n'
-          'Le stock sera réapprovisionné.',
+  void _showEditDialog(BuildContext context, WidgetRef ref, SaleModel sale) {
+    if (sale.locked) {
+      // Afficher dialogue verrouillé directement
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.lock, color: Colors.orange),
+              const SizedBox(width: 8),
+              const Text('Vente verrouillée'),
+            ],
+          ),
+          content: const Text(
+            'Cette vente est verrouillée et ne peut pas être modifiée.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Fermer'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await ref.read(saleNotifierProvider.notifier).deleteSale(sale);
-              ref.invalidate(salesProvider);
-              ref.invalidate(productsProvider);
-              if (context.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+      );
+    } else {
+      // Édition normale
+      showEditSaleDialog(context, sale);
+    }
   }
+}
+
+void _confirmDelete(BuildContext context, WidgetRef ref, SaleModel sale) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Supprimer ?'),
+      content: Text('${sale.productName} - ${sale.formattedAmount}'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Annuler'),
+        ),
+        TextButton(
+          onPressed: () async {
+            await ref.read(saleNotifierProvider.notifier).deleteSale(sale);
+            ref.invalidate(salesProvider);
+            ref.invalidate(productsProvider);
+            if (context.mounted) Navigator.pop(ctx);
+          },
+          child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
 }

@@ -8,8 +8,7 @@ class RouteGuard extends StatelessWidget {
   const RouteGuard({
     super.key,
     required this.child,
-    this.requiredRole =
-        'user', // Par défaut, tout utilisateur connecté peut accéder
+    this.requiredRole = 'user',
   });
 
   @override
@@ -24,7 +23,6 @@ class RouteGuard extends StatelessWidget {
         }
 
         if (isLoggedInSnapshot.data != true) {
-          // Si l'utilisateur n'est pas connecté, rediriger vers la page de connexion
           WidgetsBinding.instance.addPostFrameCallback((_) {
             Navigator.pushReplacementNamed(context, '/login');
           });
@@ -33,9 +31,9 @@ class RouteGuard extends StatelessWidget {
           );
         }
 
-        // Si une vérification de rôle est nécessaire
         if (requiredRole != 'user') {
-          return FutureBuilder<String>(
+          // ✅ CORRIGÉ : FutureBuilder<String?> au lieu de FutureBuilder<String>
+          return FutureBuilder<String?>(
             future: AuthService().getUserRole(),
             builder: (context, roleSnapshot) {
               if (roleSnapshot.connectionState == ConnectionState.waiting) {
@@ -44,8 +42,9 @@ class RouteGuard extends StatelessWidget {
                 );
               }
 
-              if (roleSnapshot.data != requiredRole) {
-                // Si le rôle n'est pas celui requis, rediriger vers une page d'erreur ou la page d'accueil
+              // ✅ CORRIGÉ : Vérification avec gestion du null
+              if (roleSnapshot.data != requiredRole &&
+                  roleSnapshot.data != null) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   Navigator.pushReplacementNamed(context, '/home');
                 });
@@ -59,7 +58,6 @@ class RouteGuard extends StatelessWidget {
           );
         }
 
-        // Si tout est OK, afficher la page demandée
         return child;
       },
     );

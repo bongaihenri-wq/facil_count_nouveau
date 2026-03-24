@@ -4,6 +4,7 @@ import '../../providers/sale_provider.dart';
 import 'widgets/sale_list.dart';
 import 'widgets/sale_dashboard.dart';
 import 'dialogs/add_sale_dialog.dart';
+import 'package:facil_count_nouveau/presentation/screens/sales/dialogs/filter_dialog.dart';
 
 class SaleScreen extends ConsumerWidget {
   const SaleScreen({super.key});
@@ -11,13 +12,37 @@ class SaleScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final salesAsync = ref.watch(salesProvider);
-    final statsAsync = ref.watch(saleRepositoryProvider).getMonthlyStats();
     final selectedTab = ref.watch(saleTabProvider);
+    final filters = ref.watch(saleFiltersProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ventes'),
         backgroundColor: Colors.green.shade700,
+        actions: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: filters.isActive
+                  ? Colors.red
+                  : Colors.transparent, // ✅ isActive
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: Icon(
+                Icons.filter_list,
+                color: filters.isActive ? Colors.white : Colors.white70,
+                size: filters.isActive ? 28 : 24,
+              ),
+              onPressed: () => showSaleFilterDialog(context),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => showAddSaleDialog(context),
+          ),
+        ],
       ),
       body: salesAsync.when(
         data: (sales) => Column(
@@ -26,11 +51,7 @@ class SaleScreen extends ConsumerWidget {
             Expanded(
               child: selectedTab == 0
                   ? SaleList(sales: sales)
-                  : FutureBuilder(
-                      future: statsAsync,
-                      builder: (context, snapshot) =>
-                          SaleDashboard(stats: snapshot.data ?? {}),
-                    ),
+                  : SaleDashboard(sales: sales), // ← Passer les sales ici
             ),
           ],
         ),

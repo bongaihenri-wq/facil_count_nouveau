@@ -1,76 +1,58 @@
+import 'package:facil_count_nouveau/presentation/providers/sale_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/product_model.dart';
-import '../../../providers/sale_provider.dart';
-import '../widgets/product_selector.dart';
+import '../../../providers/purchase_provider.dart';
+import '../../../providers/expense_provider.dart'; // Pour productsProvider
+import '../../../widgets/product_selector.dart'; // ✅ CHEMIN CORRIGÉ
 import '../../../providers/product_provider.dart';
 
-void showAddSaleDialog(BuildContext context) {
-  showDialog(context: context, builder: (ctx) => const _AddSaleDialog());
+void showAddPurchaseDialog(BuildContext context) {
+  showDialog(context: context, builder: (ctx) => const _AddPurchaseDialog());
 }
 
-class _AddSaleDialog extends ConsumerStatefulWidget {
-  const _AddSaleDialog();
+class _AddPurchaseDialog extends ConsumerStatefulWidget {
+  const _AddPurchaseDialog();
 
   @override
-  ConsumerState<_AddSaleDialog> createState() => _AddSaleDialogState();
+  ConsumerState<_AddPurchaseDialog> createState() => _AddPurchaseDialogState();
 }
 
-class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
+class _AddPurchaseDialogState extends ConsumerState<_AddPurchaseDialog> {
   final _quantityCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
-  final _customerCtrl = TextEditingController();
+  final _supplierCtrl = TextEditingController();
   ProductModel? _selectedProduct;
-  DateTime _saleDate = DateTime.now();
+  DateTime _purchaseDate = DateTime.now();
   bool _paid = true;
 
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
-    final state = ref.watch(saleNotifierProvider);
+    final state = ref.watch(purchaseNotifierProvider);
 
     return AlertDialog(
-      title: const Text('Nouvelle vente'),
+      title: const Text('Nouvel achat'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Affichage debug si erreur
+            // Sélecteur produit
             productsAsync.when(
-              data: (products) {
-                if (products.isEmpty) {
-                  return const Text('⚠️ Aucun produit chargé');
-                }
-                return ProductSelector(
-                  products: products,
-                  selectedProduct: _selectedProduct,
-                  onChanged: (ProductModel? p) {
-                    setState(() {
-                      _selectedProduct = p;
-                      print(
-                        'Dans setState: ${_selectedProduct?.name}',
-                      ); // Debug
-                    });
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Column(
-                children: [
-                  const Icon(Icons.error, color: Colors.red),
-                  Text(
-                    'Erreur: $err',
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                  Text('Stack: $stack', style: const TextStyle(fontSize: 10)),
-                ],
+              data: (products) => ProductSelector(
+                products: products,
+                selectedProduct: _selectedProduct,
+                onChanged: (p) => setState(() => _selectedProduct = p),
               ),
+              loading: () => const CircularProgressIndicator(),
+              error: (_, __) => const Text('Erreur chargement produits'),
             ),
 
             const SizedBox(height: 16),
 
+            // Quantité
             TextField(
               controller: _quantityCtrl,
               decoration: const InputDecoration(
@@ -83,6 +65,7 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
 
             const SizedBox(height: 16),
 
+            // Montant
             TextField(
               controller: _amountCtrl,
               decoration: const InputDecoration(
@@ -99,25 +82,29 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
 
             const SizedBox(height: 16),
 
+            // Fournisseur
             TextField(
-              controller: _customerCtrl,
+              controller: _supplierCtrl,
               decoration: const InputDecoration(
-                labelText: 'Client (optionnel)',
+                labelText: 'Fournisseur (optionnel)',
                 border: OutlineInputBorder(),
               ),
             ),
 
             const SizedBox(height: 16),
 
-            OutlinedButton(
+            // Date
+            OutlinedButton.icon(
               onPressed: _pickDate,
-              child: Text(
-                'Date: ${DateFormat('dd/MM/yyyy').format(_saleDate)}',
-              ),
+              icon: const Icon(Icons.calendar_today),
+              label: Text(DateFormat('dd/MM/yyyy').format(_purchaseDate)),
             ),
 
+            const SizedBox(height: 8),
+
+            // Payé
             SwitchListTile(
-              title: const Text('Payé (cash)'),
+              title: const Text('Payé'),
               value: _paid,
               onChanged: (v) => setState(() => _paid = v),
             ),
@@ -130,12 +117,14 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
           child: const Text('Annuler'),
         ),
         ElevatedButton(
-          onPressed: () {
-            print('Produit avant submit: ${_selectedProduct?.name}');
-            print('ID: ${_selectedProduct?.id}');
-            _submit();
-          },
-          child: const Text('Enregistrer'),
+          onPressed: state.isLoading ? null : _submit,
+          child: state.isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Enregistrer'),
         ),
       ],
     );
@@ -144,11 +133,11 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _saleDate,
+      initialDate: _purchaseDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      lastDate: DateTime.now(),
     );
-    if (picked != null) setState(() => _saleDate = picked);
+    if (picked != null) setState(() => _purchaseDate = picked);
   }
 
   Future<void> _submit() async {
@@ -165,26 +154,20 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
       return;
     }
 
-    if (quantity > (_selectedProduct!.currentStock)) {
-      _showError(
-        'Stock insuffisant. Disponible: ${_selectedProduct!.currentStock}',
-      );
-      return;
-    }
-
     await ref
-        .read(saleNotifierProvider.notifier)
-        .createSale(
+        .read(purchaseNotifierProvider.notifier)
+        .createPurchase(
           productId: _selectedProduct!.id,
           quantity: quantity,
           amount: amount,
-          customer: _customerCtrl.text.trim().isEmpty
+          supplier: _supplierCtrl.text.trim().isEmpty
               ? null
-              : _customerCtrl.text.trim(),
-          saleDate: _saleDate,
+              : _supplierCtrl.text.trim(),
+          purchaseDate: _purchaseDate,
+          paid: _paid,
         );
 
-    ref.invalidate(salesProvider);
+    ref.invalidate(purchasesProvider);
     ref.invalidate(productsProvider);
 
     if (mounted) Navigator.pop(context);

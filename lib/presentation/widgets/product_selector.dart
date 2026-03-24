@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../data/models/product_model.dart';
+import '../../../data/models/product_model.dart';
 
 class ProductSelector extends StatelessWidget {
   final List<ProductModel> products;
@@ -37,7 +37,7 @@ class ProductSelector extends StatelessWidget {
 
         return DropdownMenuItem<ProductModel?>(
           value: product,
-          enabled: true, // 🔥 TOUJOURS ACTIVÉ (même si stock 0)
+          enabled: true,
           child: Row(
             children: [
               Expanded(
@@ -45,7 +45,6 @@ class ProductSelector extends StatelessWidget {
                   product.name,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    // 🔥 Grisé si rupture mais cliquable
                     color: product.isOutOfStock ? Colors.grey : Colors.black,
                   ),
                 ),
@@ -70,20 +69,7 @@ class ProductSelector extends StatelessWidget {
           ),
         );
       }).toList(),
-      onChanged: (ProductModel? value) {
-        print('Sélection: ${value?.name}'); // Debug
-        if (value != null && value.isOutOfStock) {
-          // 🔥 Afficher avertissement si stock 0
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('⚠️ ${value.name} est en rupture de stock !'),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-        onChanged(value);
-      },
+      onChanged: onChanged,
       decoration: const InputDecoration(
         labelText: 'Produit *',
         border: OutlineInputBorder(),

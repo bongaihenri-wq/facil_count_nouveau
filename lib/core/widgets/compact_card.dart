@@ -16,6 +16,7 @@ class CompactCard extends StatelessWidget {
   final bool showQuantityCircle; // Afficher le cercle de quantité
   final IconData? lockIcon; // Icône de verrouillage personnalisable
   final Color? lockIconColor; // Couleur de l'icône de verrouillage
+  final Widget? additionalInfo; // NOUVEAU
 
   const CompactCard({
     super.key,
@@ -31,6 +32,7 @@ class CompactCard extends StatelessWidget {
     this.showQuantityCircle = true,
     this.lockIcon,
     this.lockIconColor,
+    this.additionalInfo, // NOUVEAU
   });
 
   @override
@@ -172,23 +174,20 @@ class CompactSaleCard extends CompactCard {
   CompactSaleCard({
     super.key,
     required String productName,
-    required double amount,
-    required int quantity,
+    required super.amount,
+    required super.quantity,
     required String date,
-    required bool isLocked,
-    required VoidCallback onEdit,
-    required VoidCallback onDelete,
+    required super.isLocked,
+    required super.onEdit,
+    required super.onDelete,
+    Widget? additionalInfo, // NOUVEAU
   }) : super(
          title: productName,
          subtitle: date,
-         amount: amount,
-         quantity: quantity,
-         isLocked: isLocked,
-         onEdit: onEdit,
-         onDelete: onDelete,
          amountColor: Colors.green.shade700, // Couleur verte pour les ventes
          backgroundColor: Colors.green.shade50, // Fond vert clair
          showQuantityCircle: true,
+         additionalInfo: additionalInfo, // NOUVEAU
        );
 }
 
@@ -197,23 +196,20 @@ class CompactPurchaseCard extends CompactCard {
   CompactPurchaseCard({
     super.key,
     required String productName,
-    required double amount,
-    required int quantity,
+    required super.amount,
+    required super.quantity,
     required String date,
-    required bool isLocked,
-    required VoidCallback onEdit,
-    required VoidCallback onDelete,
+    required super.isLocked,
+    required super.onEdit,
+    required super.onDelete,
+    Widget? additionalInfo, // NOUVEAU
   }) : super(
          title: productName,
          subtitle: date,
-         amount: amount,
-         quantity: quantity,
-         isLocked: isLocked,
-         onEdit: onEdit,
-         onDelete: onDelete,
          amountColor: Colors.blue.shade700, // Couleur bleue pour les achats
          backgroundColor: Colors.blue.shade50, // Fond bleu clair
          showQuantityCircle: true,
+         additionalInfo: additionalInfo, // NOUVEAU
        );
 }
 
@@ -222,19 +218,15 @@ class CompactExpenseCard extends CompactCard {
   CompactExpenseCard({
     super.key,
     required String description,
-    required double amount,
+    required super.amount,
     required String date,
-    required bool isLocked,
-    required VoidCallback onEdit,
-    required VoidCallback onDelete,
+    required super.isLocked,
+    required super.onEdit,
+    required super.onDelete,
   }) : super(
          title: description,
          subtitle: date,
-         amount: amount,
-         quantity: 1, // Toujours 1 pour les dépenses
-         isLocked: isLocked,
-         onEdit: onEdit,
-         onDelete: onDelete,
+         quantity: 1,
          amountColor:
              Colors.orange.shade700, // Couleur orange pour les dépenses
          backgroundColor: Colors.orange.shade50, // Fond orange clair
@@ -251,14 +243,14 @@ class AnnualDashboardCard extends StatelessWidget {
   final Color backgroundColor;
 
   const AnnualDashboardCard({
-    Key? key,
+    super.key,
     required this.month,
     required this.amount,
     required this.previousAmount,
     required this.isIncrease,
     required this.amountColor,
     required this.backgroundColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

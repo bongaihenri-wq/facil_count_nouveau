@@ -6,10 +6,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'presentation/screens/expenses/expense_screen.dart';
 import 'presentation/screens/sales/sale_screen.dart';
+import 'presentation/screens/purchases/purchase_screen.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/dashboard_screen.dart';
-import 'screens/purchases_screen.dart';
+//import 'screens/purchases_screen.dart';
 //import 'screens/sales_screen.dart';
 // import 'screens/expenses_screen.dart';
 import 'screens/invoices_screen.dart';
@@ -134,7 +135,8 @@ class FacilCountApp extends ConsumerWidget {
       routes: {
         '/': (context) => const HomeScreen(),
         '/dashboard': (context) => const DashboardScreen(),
-        '/purchases': (context) => const PurchasesScreen(),
+        // '/purchases': (context) => const PurchasesScreen(),
+        '/purchases': (context) => const PurchaseScreen(),
         //'/sales': (context) => const SalesScreen(),
         //'/expenses': (context) => const ExpensesScreen(),
         '/invoices': (context) => const InvoicesScreen(),

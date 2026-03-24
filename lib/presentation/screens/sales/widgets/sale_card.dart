@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../data/models/sale_model.dart';
+import 'package:facil_count_nouveau/core/utils/formatters.dart';
 
 class SaleCard extends StatelessWidget {
   final SaleModel sale;
@@ -24,7 +25,7 @@ class SaleCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Icône verte (comme dépenses)
+            // Icône
             CircleAvatar(
               radius: 20,
               backgroundColor: Colors.green.shade100,
@@ -35,9 +36,9 @@ class SaleCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Info (comme dépenses)
+            // Info
             Expanded(child: _buildInfo()),
-            // Actions (comme dépenses)
+            // Actions
             SizedBox(width: 140, child: _buildActions()),
           ],
         ),
@@ -62,7 +63,7 @@ class SaleCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        // QUANTITÉ × PRIX UNITAIRE (nouveau, entre nom et date)
+        // Quantité × prix (NOUVEAU)
         Text(
           '${sale.quantity}x @ ${sale.unitPrice.toStringAsFixed(0)} CFA',
           style: TextStyle(
@@ -85,9 +86,11 @@ class SaleCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Montant total
+        // Montant
         Text(
-          sale.formattedAmount,
+          Formatters.formatCurrency(
+            sale.amount,
+          ), // Au lieu de sale.formattedAmount
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
@@ -95,25 +98,22 @@ class SaleCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        // Icônes action
+        // Icônes
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Verrou
             Icon(
               Icons.lock,
               size: 18,
               color: sale.locked ? Colors.orange : Colors.grey.shade400,
             ),
             const SizedBox(width: 4),
-            // Éditer
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               icon: Icon(Icons.edit, size: 20, color: Colors.blue.shade700),
               onPressed: onEdit,
             ),
-            // Supprimer
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),

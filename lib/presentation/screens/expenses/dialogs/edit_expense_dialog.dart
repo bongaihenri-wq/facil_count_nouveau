@@ -2,40 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../../data/models/expense_model.dart';
 import '../../../providers/expense_provider.dart';
 
-void showAddExpenseDialog(BuildContext context) {
-  showDialog(context: context, builder: (ctx) => const _AddExpenseDialog());
+void showEditExpenseDialog(BuildContext context, ExpenseModel expense) {
+  showDialog(
+    context: context,
+    builder: (ctx) => _EditExpenseDialog(expense: expense),
+  );
 }
 
-class _AddExpenseDialog extends ConsumerStatefulWidget {
-  const _AddExpenseDialog();
+class _EditExpenseDialog extends ConsumerStatefulWidget {
+  final ExpenseModel expense;
+
+  const _EditExpenseDialog({required this.expense});
 
   @override
-  ConsumerState<_AddExpenseDialog> createState() => _AddExpenseDialogState();
+  ConsumerState<_EditExpenseDialog> createState() => _EditExpenseDialogState();
 }
 
-class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
-  final _nameCtrl = TextEditingController();
-  final _amountCtrl = TextEditingController();
-  final _recipientCtrl = TextEditingController();
-  final _invoiceCtrl = TextEditingController();
-  DateTime _expenseDate = DateTime.now();
+class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
+  late final _nameCtrl = TextEditingController(text: widget.expense.name);
+  late final _amountCtrl = TextEditingController(
+    text: widget.expense.amount.toString(),
+  );
+  late final _recipientCtrl = TextEditingController(
+    text: widget.expense.recipient ?? '',
+  );
+  late final _invoiceCtrl = TextEditingController(
+    text: widget.expense.invoiceNumber ?? '',
+  );
+  late DateTime _expenseDate = widget.expense.expensesDate;
+  late bool _locked = widget.expense.locked;
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(expenseNotifierProvider);
 
+    if (_locked) {
+      return _buildLockedView();
+    }
+
     return AlertDialog(
-      title: const Text('Nouvelle dépense'),
+      title: const Text('Modifier dépense'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            SwitchListTile(
+              title: const Text('Verrouiller'),
+              value: _locked,
+              onChanged: (v) => setState(() => _locked = v),
+            ),
+            const Divider(),
             TextField(
               controller: _nameCtrl,
               decoration: const InputDecoration(
-                labelText: 'Nom de la dépense *',
+                labelText: 'Nom *',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -53,7 +76,7 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
             TextField(
               controller: _recipientCtrl,
               decoration: const InputDecoration(
-                labelText: 'Bénéficiaire (optionnel)',
+                labelText: 'Bénéficiaire',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -61,7 +84,7 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
             TextField(
               controller: _invoiceCtrl,
               decoration: const InputDecoration(
-                labelText: 'N° Facture (optionnel)',
+                labelText: 'N° Facture',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -89,6 +112,35 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
     );
   }
 
+  Widget _buildLockedView() {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.lock, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Dépense verrouillée'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Nom: ${widget.expense.name}'),
+          Text('Montant: ${widget.expense.formattedAmount}'),
+          Text(
+            'Date: ${DateFormat('dd/MM/yyyy').format(widget.expense.expensesDate)}',
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Fermer'),
+        ),
+      ],
+    );
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -110,13 +162,15 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
 
     await ref
         .read(expenseNotifierProvider.notifier)
-        .addExpense(
+        .updateExpense(
+          widget.expense.id,
           name: name,
           amount: amount,
           recipient: _recipientCtrl.text.trim().isEmpty
               ? null
               : _recipientCtrl.text.trim(),
           expensesDate: _expenseDate,
+          locked: _locked,
         );
 
     ref.invalidate(filteredExpensesProvider);

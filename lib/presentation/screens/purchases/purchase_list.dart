@@ -1,32 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../data/models/expense_model.dart';
-import '/presentation/providers/expense_provider.dart';
-import '../dialogs/edit_expense_dialog.dart';
-import 'expense_card.dart';
+import '../../../data/models/purchase_model.dart';
+import '../../providers/purchase_provider.dart';
+import 'dialogs/edit_purchase_dialog.dart';
+import 'purchase_card.dart';
 import 'package:facil_count_nouveau/core/utils/formatters.dart';
 
 final selectedPeriodProvider = StateProvider<String>((ref) => 'Mois');
 
-class ExpenseList extends ConsumerWidget {
-  final List<ExpenseModel> expenses;
+class PurchaseList extends ConsumerWidget {
+  final List<PurchaseModel> purchases;
 
-  const ExpenseList({super.key, required this.expenses});
+  const PurchaseList({super.key, required this.purchases});
 
-  List<ExpenseModel> _filterByPeriod(
-    List<ExpenseModel> expenses,
+  List<PurchaseModel> _filterByPeriod(
+    List<PurchaseModel> purchases,
     String period,
   ) {
     final now = DateTime.now();
-    return expenses.where((e) {
+    return purchases.where((p) {
       switch (period) {
         case 'Semaine':
-          return e.expensesDate.isAfter(now.subtract(const Duration(days: 7)));
+          return p.purchaseDate.isAfter(now.subtract(const Duration(days: 7)));
         case 'Mois':
-          return e.expensesDate.month == now.month &&
-              e.expensesDate.year == now.year;
+          return p.purchaseDate.month == now.month &&
+              p.purchaseDate.year == now.year;
         case 'Année':
-          return e.expensesDate.year == now.year;
+          return p.purchaseDate.year == now.year;
         default:
           return true;
       }
@@ -36,13 +36,13 @@ class ExpenseList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedPeriod = ref.watch(selectedPeriodProvider);
-    final filtered = _filterByPeriod(expenses, selectedPeriod);
+    final filtered = _filterByPeriod(purchases, selectedPeriod);
 
     if (filtered.isEmpty) {
-      return const Center(child: Text('Aucune dépense trouvée'));
+      return const Center(child: Text('Aucun achat trouvé'));
     }
 
-    final total = filtered.fold<double>(0, (sum, e) => sum + e.amount);
+    final total = filtered.fold<double>(0, (sum, p) => sum + p.amount);
 
     return Column(
       children: [
@@ -52,8 +52,8 @@ class ExpenseList extends ConsumerWidget {
           child: ListView.builder(
             padding: const EdgeInsets.all(8),
             itemCount: filtered.length,
-            itemBuilder: (context, index) => ExpenseCard(
-              expense: filtered[index],
+            itemBuilder: (context, index) => PurchaseCard(
+              purchase: filtered[index],
               onEdit: () => _showEditDialog(context, ref, filtered[index]),
               onDelete: () => _confirmDelete(context, ref, filtered[index]),
             ),
@@ -69,22 +69,22 @@ class ExpenseList extends ConsumerWidget {
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.red.shade50,
+        color: Colors.blue.shade50,
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
               const Text(
-                'Total dépenses',
+                'Total achats',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 12),
               Text(
-                Formatters.formatCurrency(total),
+                Formatters.formatCurrency(total), // ← SÉPARATEUR DE MILLIERS
                 style: TextStyle(
                   fontSize: 34,
                   fontWeight: FontWeight.bold,
-                  color: Colors.red.shade800,
+                  color: Colors.blue.shade800,
                 ),
               ),
             ],
@@ -109,7 +109,7 @@ class ExpenseList extends ConsumerWidget {
                 selected: isSelected,
                 onSelected: (_) =>
                     ref.read(selectedPeriodProvider.notifier).state = period,
-                selectedColor: Colors.red.shade700,
+                selectedColor: Colors.blue.shade700,
                 backgroundColor: Colors.grey.shade200,
                 labelStyle: TextStyle(
                   color: isSelected ? Colors.white : Colors.black87,
@@ -125,9 +125,9 @@ class ExpenseList extends ConsumerWidget {
   void _showEditDialog(
     BuildContext context,
     WidgetRef ref,
-    ExpenseModel expense,
+    PurchaseModel purchase,
   ) {
-    if (expense.locked) {
+    if (purchase.locked) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -135,11 +135,11 @@ class ExpenseList extends ConsumerWidget {
             children: [
               Icon(Icons.lock, color: Colors.orange),
               SizedBox(width: 8),
-              Text('Dépense verrouillée'),
+              Text('Achat verrouillé'),
             ],
           ),
           content: const Text(
-            'Cette dépense est verrouillée et ne peut pas être modifiée.',
+            'Cet achat est verrouillé et ne peut pas être modifié.',
           ),
           actions: [
             TextButton(
@@ -150,20 +150,20 @@ class ExpenseList extends ConsumerWidget {
         ),
       );
     } else {
-      showEditExpenseDialog(context, expense);
+      showEditPurchaseDialog(context, purchase);
     }
   }
 
   void _confirmDelete(
     BuildContext context,
     WidgetRef ref,
-    ExpenseModel expense,
+    PurchaseModel purchase,
   ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Supprimer ?'),
-        content: Text('${expense.name} - ${expense.formattedAmount}'),
+        content: Text('${purchase.productName} - ${purchase.formattedAmount}'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -172,9 +172,9 @@ class ExpenseList extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               await ref
-                  .read(expenseNotifierProvider.notifier)
-                  .deleteExpense(expense.id);
-              ref.invalidate(filteredExpensesProvider);
+                  .read(purchaseNotifierProvider.notifier)
+                  .deletePurchase(purchase.id);
+              ref.invalidate(purchasesProvider);
               if (context.mounted) Navigator.pop(ctx);
             },
             child: const Text('Supprimer', style: TextStyle(color: Colors.red)),

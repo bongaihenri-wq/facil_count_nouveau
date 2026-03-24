@@ -1,7 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:facil_count_nouveau/models/user_model.dart' as user_model;
-import 'package:facil_count_nouveau/models/business_model.dart'
-    as business_model;
+import 'package:facil_count_nouveau/data/models/user_model.dart' as user_model;
+import 'package:facil_count_nouveau/data/models/business_model.dart';
 
 class AuthService {
   final supabase = Supabase.instance.client;
@@ -14,7 +13,6 @@ class AuthService {
     required bool isAdmin,
   }) async {
     try {
-      // Vérifier si le numéro de téléphone existe déjà
       final existingUser = await supabase
           .from('users')
           .select()
@@ -25,7 +23,6 @@ class AuthService {
         throw Exception('Ce numéro de téléphone est déjà utilisé.');
       }
 
-      // Créer le commerce
       final businessRes = await supabase
           .from('businesses')
           .insert({'name': businessName, 'type': businessType})
@@ -36,15 +33,13 @@ class AuthService {
         throw Exception('Erreur lors de la création du commerce.');
       }
 
-      final business = business_model.Business.fromMap(businessRes);
+      final business = BusinessModel.fromJson(businessRes);
 
-      // Créer l'utilisateur
       final userRes = await supabase
           .from('users')
           .insert({
             'phone_number': phoneNumber,
-            'password':
-                password, // En production, utilisez un hashage de mot de passe
+            'password': password,
             'business_id': business.id,
             'role': isAdmin ? 'admin' : 'user',
           })
@@ -55,6 +50,7 @@ class AuthService {
         throw Exception('Erreur lors de la création de l\'utilisateur.');
       }
 
+      // ✅ CORRIGÉ : user_model.User.fromMap
       return user_model.User.fromMap(userRes);
     } on PostgrestException catch (e) {
       throw Exception('Erreur lors de l\'enregistrement: ${e.message}');
@@ -69,16 +65,14 @@ class AuthService {
           .from('users')
           .select()
           .eq('phone_number', phoneNumber)
-          .eq(
-            'password',
-            password,
-          ) // En production, utilisez un hashage de mot de passe
+          .eq('password', password)
           .maybeSingle();
 
       if (userRes == null) {
         throw Exception('Numéro de téléphone ou mot de passe incorrect.');
       }
 
+      // ✅ CORRIGÉ : user_model.User.fromMap
       return user_model.User.fromMap(userRes);
     } on PostgrestException catch (e) {
       throw Exception('Erreur lors de la connexion: ${e.message}');

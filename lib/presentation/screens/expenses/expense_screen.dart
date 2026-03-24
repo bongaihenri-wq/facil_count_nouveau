@@ -1,128 +1,99 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'widgets/expense_list.dart';
-import 'widgets/expense_dashboard.dart';
+import '../../../data/models/expense_model.dart';
+import '../../providers/expense_provider.dart';
 import 'dialogs/add_expense_dialog.dart';
-import '/presentation/providers/expense_provider.dart';
+import 'dialogs/filter_dialog.dart';
+import 'widgets/expense_dashboard.dart';
+import 'widgets/expense_list.dart';
 
 class ExpenseScreen extends ConsumerWidget {
   const ExpenseScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tabIndex = ref.watch(expenseTabProvider);
     final expensesAsync = ref.watch(filteredExpensesProvider);
-    final statsAsync = ref.watch(expenseStatsProvider);
-    final selectedTab = ref.watch(expenseTabProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dépenses'),
-        backgroundColor: Colors.orange.shade700,
+        backgroundColor: Colors.red.shade700,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.filter_list),
-            onPressed: () => _showFilter(context, ref),
+            onPressed: () => _showFilterDialog(context, ref),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => showAddExpenseDialog(context),
           ),
         ],
       ),
-      body: expensesAsync.when(
-        data: (expenses) => Column(
-          children: [
-            _buildTabBar(context, ref),
-            Expanded(
-              child: selectedTab == 0
-                  ? ExpenseList(expenses: expenses)
-                  : ExpenseDashboard(stats: statsAsync.valueOrNull ?? {}),
-            ),
-          ],
-        ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Erreur: $err')),
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.orange.shade700,
-        onPressed: () => showAddExpenseDialog(context),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildTabBar(BuildContext context, WidgetRef ref) {
-    final selectedTab = ref.watch(expenseTabProvider);
-
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      body: Column(
         children: [
-          _TabButton(
-            label: 'Liste',
-            selected: selectedTab == 0,
-            onTap: () => ref.read(expenseTabProvider.notifier).state = 0,
-            color: Colors.orange.shade700,
+          // Tabs
+          Container(
+            color: Colors.red.shade50,
+            child: Row(
+              children: [
+                _buildTab(context, ref, 'Liste', 0),
+                _buildTab(context, ref, 'Dashboard', 1),
+              ],
+            ),
           ),
-          _TabButton(
-            label: 'Dashboard',
-            selected: selectedTab == 1,
-            onTap: () => ref.read(expenseTabProvider.notifier).state = 1,
-            color: Colors.orange.shade700,
+          // Contenu
+          Expanded(
+            child: expensesAsync.when(
+              data: (expenses) => tabIndex == 0
+                  ? ExpenseList(expenses: expenses)
+                  : ExpenseDashboard(expenses: expenses),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, _) => Center(child: Text('Erreur: $err')),
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _showFilter(BuildContext context, WidgetRef ref) {
-    // TODO: Implémenter le filtre
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => const SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Filtres (à implémenter)'),
-        ),
-      ),
-    );
-  }
-}
+  Widget _buildTab(
+    BuildContext context,
+    WidgetRef ref,
+    String label,
+    int index,
+  ) {
+    final currentTab = ref.watch(expenseTabProvider);
+    final isSelected = currentTab == index;
 
-extension on AsyncValue<Map<String, dynamic>> {
-  Map<String, dynamic>? get valueOrNull => null;
-}
-
-class _TabButton extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final Color color;
-
-  const _TabButton({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : Colors.black87,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 15,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => ref.read(expenseTabProvider.notifier).state = index,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected ? Colors.red.shade700 : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected ? Colors.red.shade700 : Colors.grey,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
           ),
         ),
       ),
     );
+  }
+
+  void _showFilterDialog(BuildContext context, WidgetRef ref) {
+    showExpenseFilterDialog(context);
   }
 }

@@ -1,15 +1,15 @@
+import 'package:facil_count_nouveau/data/models/purchase_model.dart';
 import 'package:flutter/material.dart';
-import '../../../../data/models/expense_model.dart';
-import 'package:facil_count_nouveau/core/utils/formatters.dart';
+import '../../../data/models/purchase_model.dart';
 
-class ExpenseCard extends StatelessWidget {
-  final ExpenseModel expense;
+class PurchaseCard extends StatelessWidget {
+  final PurchaseModel purchase;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const ExpenseCard({
+  const PurchaseCard({
     super.key,
-    required this.expense,
+    required this.purchase,
     required this.onEdit,
     required this.onDelete,
   });
@@ -27,10 +27,10 @@ class ExpenseCard extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: Colors.red.shade100,
+              backgroundColor: Colors.blue.shade100,
               child: const Icon(
-                Icons.receipt_long,
-                color: Colors.red,
+                Icons.shopping_cart,
+                color: Colors.blue,
                 size: 20,
               ),
             ),
@@ -48,7 +48,7 @@ class ExpenseCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          expense.name,
+          purchase.productName ?? 'Produit inconnu',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -58,14 +58,22 @@ class ExpenseCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        if (expense.recipient != null)
+        Text(
+          '${purchase.quantity}x @ ${purchase.unitPrice.toStringAsFixed(0)} CFA',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        if (purchase.supplier != null)
           Text(
-            'À: ${expense.recipient}',
+            'Fournisseur: ${purchase.supplier}',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
           ),
         const SizedBox(height: 2),
         Text(
-          expense.formattedDate,
+          purchase.formattedDate,
           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
       ],
@@ -77,11 +85,11 @@ class ExpenseCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
-          expense.formattedAmount,
+          purchase.formattedAmount,
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
-            color: Colors.red.shade800,
+            color: Colors.blue.shade800,
           ),
         ),
         const SizedBox(height: 4),
@@ -91,7 +99,7 @@ class ExpenseCard extends StatelessWidget {
             Icon(
               Icons.lock,
               size: 18,
-              color: expense.locked ? Colors.orange : Colors.grey.shade400,
+              color: purchase.locked ? Colors.orange : Colors.grey.shade400,
             ),
             const SizedBox(width: 4),
             IconButton(
