@@ -311,12 +311,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   void _showAddInvoiceForm() {
     String? selectedType;
-    final _numberController = TextEditingController();
-    final _amountController = TextEditingController();
+    final numberController = TextEditingController();
+    final amountController = TextEditingController();
     DateTime invoiceDate = DateTime.now();
     String? selectedStatus = 'En attente';
-    final _imageUrlController = TextEditingController();
-    final _notesController = TextEditingController();
+    final imageUrlController = TextEditingController();
+    final notesController = TextEditingController();
 
     showDialog(
       context: context,
@@ -334,7 +334,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         labelText: 'Type *',
                         border: OutlineInputBorder(),
                       ),
-                      value: selectedType,
+                      initialValue: selectedType,
                       items: ['Achats', 'Ventes', 'Dépenses']
                           .map(
                             (t) => DropdownMenuItem(value: t, child: Text(t)),
@@ -345,7 +345,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _numberController,
+                      controller: numberController,
                       decoration: const InputDecoration(
                         labelText: 'Numéro facture *',
                         border: OutlineInputBorder(),
@@ -360,14 +360,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                         );
-                        if (picked != null)
+                        if (picked != null) {
                           setDialogState(() => invoiceDate = picked);
+                        }
                       },
                       child: Text(DateFormat('dd/MM/yyyy').format(invoiceDate)),
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _amountController,
+                      controller: amountController,
                       decoration: const InputDecoration(
                         labelText: 'Montant TTC *',
                         border: OutlineInputBorder(),
@@ -380,7 +381,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         labelText: 'Statut',
                         border: OutlineInputBorder(),
                       ),
-                      value: selectedStatus,
+                      initialValue: selectedStatus,
                       items: ['Payée', 'En attente', 'Annulée']
                           .map(
                             (s) => DropdownMenuItem(value: s, child: Text(s)),
@@ -391,7 +392,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _imageUrlController,
+                      controller: imageUrlController,
                       decoration: const InputDecoration(
                         labelText: 'URL photo facture (optionnel)',
                         border: OutlineInputBorder(),
@@ -399,7 +400,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _notesController,
+                      controller: notesController,
                       decoration: const InputDecoration(
                         labelText: 'Notes (optionnel)',
                         border: OutlineInputBorder(),
@@ -420,8 +421,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               onPressed: () async {
                 Navigator.pop(context);
 
-                final number = _numberController.text.trim();
-                final amountText = _amountController.text.trim();
+                final number = numberController.text.trim();
+                final amountText = amountController.text.trim();
 
                 if (selectedType == null ||
                     number.isEmpty ||
@@ -446,12 +447,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     'amount': amount,
                     'status': selectedStatus,
-                    'image_url': _imageUrlController.text.trim().isEmpty
+                    'image_url': imageUrlController.text.trim().isEmpty
                         ? null
-                        : _imageUrlController.text.trim(),
-                    'notes': _notesController.text.trim().isEmpty
+                        : imageUrlController.text.trim(),
+                    'notes': notesController.text.trim().isEmpty
                         ? null
-                        : _notesController.text.trim(),
+                        : notesController.text.trim(),
                     'locked': false,
                   });
 
@@ -477,20 +478,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   void _showEditInvoiceDialog(Map<String, dynamic> invoice) {
     String? selectedType = invoice['type'];
-    final _numberController = TextEditingController(
+    final numberController = TextEditingController(
       text: invoice['number'] ?? '',
     );
-    final _amountController = TextEditingController(
+    final amountController = TextEditingController(
       text: invoice['amount'].toString(),
     );
     DateTime invoiceDate = DateTime.parse(invoice['invoice_date']);
     String? selectedStatus = invoice['status'];
-    final _imageUrlController = TextEditingController(
+    final imageUrlController = TextEditingController(
       text: invoice['image_url'] ?? '',
     );
-    final _notesController = TextEditingController(
-      text: invoice['notes'] ?? '',
-    );
+    final notesController = TextEditingController(text: invoice['notes'] ?? '');
     bool locked = invoice['locked'] ?? false;
 
     showDialog(
@@ -505,7 +504,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<String>(
-                      value: selectedType,
+                      initialValue: selectedType,
                       decoration: const InputDecoration(
                         labelText: 'Type *',
                         border: OutlineInputBorder(),
@@ -520,7 +519,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _numberController,
+                      controller: numberController,
                       decoration: const InputDecoration(
                         labelText: 'Numéro facture *',
                       ),
@@ -534,14 +533,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                         );
-                        if (picked != null)
+                        if (picked != null) {
                           setDialogState(() => invoiceDate = picked);
+                        }
                       },
                       child: Text(DateFormat('dd/MM/yyyy').format(invoiceDate)),
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _amountController,
+                      controller: amountController,
                       decoration: const InputDecoration(
                         labelText: 'Montant TTC *',
                       ),
@@ -549,7 +549,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: selectedStatus,
+                      initialValue: selectedStatus,
                       decoration: const InputDecoration(
                         labelText: 'Statut',
                         border: OutlineInputBorder(),
@@ -564,14 +564,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _imageUrlController,
+                      controller: imageUrlController,
                       decoration: const InputDecoration(
                         labelText: 'URL photo facture (optionnel)',
                       ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _notesController,
+                      controller: notesController,
                       decoration: const InputDecoration(
                         labelText: 'Notes (optionnel)',
                       ),
@@ -597,8 +597,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               onPressed: () async {
                 Navigator.pop(context);
 
-                final number = _numberController.text.trim();
-                final amountText = _amountController.text.trim();
+                final number = numberController.text.trim();
+                final amountText = amountController.text.trim();
 
                 if (selectedType == null ||
                     number.isEmpty ||
@@ -625,12 +625,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         ),
                         'amount': amount,
                         'status': selectedStatus,
-                        'image_url': _imageUrlController.text.trim().isEmpty
+                        'image_url': imageUrlController.text.trim().isEmpty
                             ? null
-                            : _imageUrlController.text.trim(),
-                        'notes': _notesController.text.trim().isEmpty
+                            : imageUrlController.text.trim(),
+                        'notes': notesController.text.trim().isEmpty
                             ? null
-                            : _notesController.text.trim(),
+                            : notesController.text.trim(),
                         'locked': locked,
                       })
                       .eq('id', invoice['id']);

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dashboard_screen.dart';
-import 'purchases_screen.dart';
-import 'sales_screen.dart';
-import 'expenses_screen.dart';
+// import 'purchases_screen.dart';
+// import 'sales_screen_old.dart';
+// import 'expenses_screen_old.dart';
 import 'invoices_screen.dart';
 import 'products_screen.dart';
 import 'cash_screen.dart';
-import 'package:facil_count_nouveau/screens/cash_screen.dart';
+import 'package:facil_count_nouveau/presentation/screens/sales/sale_screen.dart';
+import 'package:facil_count_nouveau/presentation/screens/expenses/expense_screen.dart';
+import 'package:facil_count_nouveau/presentation/screens/purchases/purchase_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -32,9 +34,7 @@ class HomeScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const PurchasesScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const PurchaseScreen()),
               ),
             ),
           ),
@@ -47,7 +47,7 @@ class HomeScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const SalesScreen()),
+                MaterialPageRoute(builder: (context) => const SaleScreen()),
               ),
             ),
           ),
@@ -60,7 +60,7 @@ class HomeScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ExpensesScreen()),
+                MaterialPageRoute(builder: (context) => const ExpenseScreen()),
               ),
             ),
           ),

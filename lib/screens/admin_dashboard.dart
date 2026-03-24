@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:facil_count_nouveau/core/services/user_service.dart';
-import 'package:facil_count_nouveau/models/user_model.dart' as user_model;
+import 'package:facil_count_nouveau/data/models/user_model.dart' as user_model;
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});

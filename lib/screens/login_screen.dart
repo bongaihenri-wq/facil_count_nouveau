@@ -2,7 +2,6 @@ import 'package:facil_count_nouveau/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:facil_count_nouveau/core/services/auth_service.dart';
 import 'package:facil_count_nouveau/screens/register_screen.dart';
-import 'package:facil_count_nouveau/screens/dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

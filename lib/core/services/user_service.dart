@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:facil_count_nouveau/models/user_model.dart' as user_model;
+import 'package:facil_count_nouveau/data/models/user_model.dart' as user_model;
 
 class UserService {
   final supabase = Supabase.instance.client;

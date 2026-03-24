@@ -15,7 +15,8 @@ class _CashScreenState extends State<CashScreen> {
   List<Map<String, dynamic>> _purchases = [];
   List<Map<String, dynamic>> _sales = [];
   List<Map<String, dynamic>> _expenses = [];
-  List<Map<String, dynamic>> _cashTransactions = []; // Versements banque, retraits, remis gérant
+  List<Map<String, dynamic>> _cashTransactions =
+      []; // Versements banque, retraits, remis gérant
   bool _isLoading = true;
 
   String _selectedPeriod = 'Jour';
@@ -34,11 +35,17 @@ class _CashScreenState extends State<CashScreen> {
       DateTime start, end;
       switch (_selectedPeriod) {
         case 'Jour':
-          start = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+          start = DateTime(
+            _selectedDate.year,
+            _selectedDate.month,
+            _selectedDate.day,
+          );
           end = start.add(const Duration(days: 1));
           break;
         case 'Semaine':
-          start = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
+          start = _selectedDate.subtract(
+            Duration(days: _selectedDate.weekday - 1),
+          );
           end = start.add(const Duration(days: 7));
           break;
         case 'Mois':
@@ -85,55 +92,62 @@ class _CashScreenState extends State<CashScreen> {
       setState(() => _isLoading = false);
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur chargement caisse : $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur chargement caisse : $e')));
     }
   }
 
   // Calculs sécurisés
   double getCashPurchases() => _purchases.fold(
-        0.0,
-        (sum, p) => sum + (p['paid'] == true ? (p['amount'] as num).toDouble() : 0.0),
-      );
+    0.0,
+    (sum, p) =>
+        sum + (p['paid'] == true ? (p['amount'] as num).toDouble() : 0.0),
+  );
 
   double getCreditPurchases() => _purchases.fold(
-        0.0,
-        (sum, p) => sum + (p['paid'] == true ? 0.0 : (p['amount'] as num).toDouble()),
-      );
+    0.0,
+    (sum, p) =>
+        sum + (p['paid'] == true ? 0.0 : (p['amount'] as num).toDouble()),
+  );
 
   double getCashSales() => _sales.fold(
-        0.0,
-        (sum, s) => sum + (s['paid'] == true ? (s['amount'] as num).toDouble() : 0.0),
-      );
+    0.0,
+    (sum, s) =>
+        sum + (s['paid'] == true ? (s['amount'] as num).toDouble() : 0.0),
+  );
 
   double getCreditSales() => _sales.fold(
-        0.0,
-        (sum, s) => sum + (s['paid'] == true ? 0.0 : (s['amount'] as num).toDouble()),
-      );
+    0.0,
+    (sum, s) =>
+        sum + (s['paid'] == true ? 0.0 : (s['amount'] as num).toDouble()),
+  );
 
   double getExpenses() => _expenses.fold(
-        0.0,
-        (sum, e) => sum + ((e['amount'] as num?)?.toDouble() ?? 0.0),
-      );
+    0.0,
+    (sum, e) => sum + ((e['amount'] as num?)?.toDouble() ?? 0.0),
+  );
 
   double getBankDeposits() => _cashTransactions.fold(
-        0.0,
-        (sum, t) =>
-            sum + (t['type'] == 'bank_deposit' ? (t['amount'] as num).toDouble() : 0.0),
-      );
+    0.0,
+    (sum, t) =>
+        sum +
+        (t['type'] == 'bank_deposit' ? (t['amount'] as num).toDouble() : 0.0),
+  );
 
   double getWithdrawals() => _cashTransactions.fold(
-        0.0,
-        (sum, t) =>
-            sum + (t['type'] == 'withdrawal' ? (t['amount'] as num).toDouble() : 0.0),
-      );
+    0.0,
+    (sum, t) =>
+        sum +
+        (t['type'] == 'withdrawal' ? (t['amount'] as num).toDouble() : 0.0),
+  );
 
   double getOwnerTransfers() => _cashTransactions.fold(
-        0.0,
-        (sum, t) =>
-            sum + (t['type'] == 'owner_transfer' ? (t['amount'] as num).toDouble() : 0.0),
-      );
+    0.0,
+    (sum, t) =>
+        sum +
+        (t['type'] == 'owner_transfer' ? (t['amount'] as num).toDouble() : 0.0),
+  );
 
   double getNetCashFlow() =>
       getCashSales() -
@@ -148,9 +162,7 @@ class _CashScreenState extends State<CashScreen> {
     final netFlow = getNetCashFlow();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Caisse'),
-      ),
+      appBar: AppBar(title: const Text('Caisse')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -198,7 +210,9 @@ class _CashScreenState extends State<CashScreen> {
                   // Solde net caisse (carte principale)
                   Card(
                     elevation: 4,
-                    color: netFlow >= 0 ? Colors.green.shade50 : Colors.red.shade50,
+                    color: netFlow >= 0
+                        ? Colors.green.shade50
+                        : Colors.red.shade50,
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Column(
@@ -206,7 +220,10 @@ class _CashScreenState extends State<CashScreen> {
                         children: [
                           const Text(
                             'Solde net de caisse',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 12),
                           Text(
@@ -214,7 +231,9 @@ class _CashScreenState extends State<CashScreen> {
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.bold,
-                              color: netFlow >= 0 ? Colors.green.shade800 : Colors.red.shade800,
+                              color: netFlow >= 0
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
                             ),
                           ),
                         ],
@@ -253,7 +272,10 @@ class _CashScreenState extends State<CashScreen> {
                           ),
                           const SizedBox(height: 8),
                           _buildCashRow('Achats cash', getCashPurchases()),
-                          _buildCashRow('Crédit fournisseurs', getCreditPurchases()),
+                          _buildCashRow(
+                            'Crédit fournisseurs',
+                            getCreditPurchases(),
+                          ),
                           _buildCashRow('Dépenses', getExpenses()),
                           _buildCashRow('Versements banque', getBankDeposits()),
                           _buildCashRow('Retraits', getWithdrawals()),
@@ -299,7 +321,8 @@ class _CashScreenState extends State<CashScreen> {
   }
 
   void _showAddCashTransaction() {
-    final typeCtrl = TextEditingController(); // ex: "bank_deposit", "withdrawal", "owner_transfer"
+    final typeCtrl =
+        TextEditingController(); // ex: "bank_deposit", "withdrawal", "owner_transfer"
     final amountCtrl = TextEditingController();
     final descriptionCtrl = TextEditingController();
     DateTime transactionDate = DateTime.now();
@@ -314,15 +337,24 @@ class _CashScreenState extends State<CashScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: null,
+                  initialValue: null,
                   decoration: const InputDecoration(
                     labelText: 'Type de transaction',
                     border: OutlineInputBorder(),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'bank_deposit', child: Text('Versement banque')),
-                    DropdownMenuItem(value: 'withdrawal', child: Text('Retrait')),
-                    DropdownMenuItem(value: 'owner_transfer', child: Text('Remis au gérant')),
+                    DropdownMenuItem(
+                      value: 'bank_deposit',
+                      child: Text('Versement banque'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'withdrawal',
+                      child: Text('Retrait'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'owner_transfer',
+                      child: Text('Remis au gérant'),
+                    ),
                   ],
                   onChanged: (val) => typeCtrl.text = val ?? '',
                 ),
@@ -334,16 +366,22 @@ class _CashScreenState extends State<CashScreen> {
                     border: OutlineInputBorder(),
                     hintText: 'Ex: 50000',
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d*\.?\d{0,2}'),
+                    ),
                   ],
                   onChanged: (value) {
                     final cleaned = value.replaceAll(',', '.');
                     if (cleaned != value) {
                       amountCtrl.value = amountCtrl.value.copyWith(
                         text: cleaned,
-                        selection: TextSelection.collapsed(offset: cleaned.length),
+                        selection: TextSelection.collapsed(
+                          offset: cleaned.length,
+                        ),
                       );
                     }
                   },
@@ -383,12 +421,17 @@ class _CashScreenState extends State<CashScreen> {
               onPressed: () async {
                 Navigator.pop(context);
 
-                final montantText = amountCtrl.text.trim().replaceAll(',', '.').replaceAll(' ', '');
+                final montantText = amountCtrl.text
+                    .trim()
+                    .replaceAll(',', '.')
+                    .replaceAll(' ', '');
                 final amount = double.tryParse(montantText) ?? 0.0;
 
                 if (typeCtrl.text.isEmpty || amount <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Type et montant obligatoires')),
+                    const SnackBar(
+                      content: Text('Type et montant obligatoires'),
+                    ),
                   );
                   return;
                 }
@@ -397,7 +440,9 @@ class _CashScreenState extends State<CashScreen> {
                   await supabase.from('cash_transactions').insert({
                     'type': typeCtrl.text,
                     'amount': amount,
-                    'description': descriptionCtrl.text.trim().isEmpty ? null : descriptionCtrl.text.trim(),
+                    'description': descriptionCtrl.text.trim().isEmpty
+                        ? null
+                        : descriptionCtrl.text.trim(),
                     'transaction_date': transactionDate.toIso8601String(),
                   });
 
@@ -406,9 +451,9 @@ class _CashScreenState extends State<CashScreen> {
                     const SnackBar(content: Text('Transaction ajoutée')),
                   );
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Erreur : $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Erreur : $e')));
                 }
               },
               child: const Text('Enregistrer'),

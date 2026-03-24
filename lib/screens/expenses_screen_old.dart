@@ -3,30 +3,27 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:facil_count_nouveau/core/constants/app_colors.dart';
-import 'package:facil_count_nouveau/core/utils/format.dart';
-import 'package:facil_count_nouveau/core/widgets/compact_card.dart';
 import 'package:facil_count_nouveau/core/services/supabase_service.dart';
+import 'package:facil_count_nouveau/core/widgets/compact_card.dart';
+import 'package:facil_count_nouveau/core/utils/format.dart';
 
-class SalesScreen extends StatefulWidget {
-  const SalesScreen({super.key});
+class ExpensesScreen extends StatefulWidget {
+  const ExpensesScreen({super.key});
 
   @override
-  State<SalesScreen> createState() => _SalesScreenState();
+  State<ExpensesScreen> createState() => _ExpensesScreenState();
 }
 
-class _SalesScreenState extends State<SalesScreen> {
-  // --- 1. Initialisation ---
+class _ExpensesScreenState extends State<ExpensesScreen> {
   final _api = SupabaseService();
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
-  List<Map<String, dynamic>> _sales = [];
-  List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _expenses = [];
   String _selectedPeriod = 'Mois';
   String _selectedTab = 'Liste';
-  String _productFilter = '';
+  String _descriptionFilter = '';
   DateTime? _startDate;
   DateTime? _endDate;
-  int? _exactQuantity;
   double _totalMoisActuel = 0;
   double _totalMoisPrecedent = 0;
   double _difference = 0;
@@ -38,13 +35,13 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
-      await Future.wait([
-        _loadSales(),
-        _loadProducts(),
-        _calculateMonthlyTotals(),
-      ]);
+      final expensesRes = await _api.getExpenses();
+      setState(() => _expenses = expensesRes);
+      await _calculateMonthlyTotals();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -56,58 +53,28 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  Future<void> _loadSales() async {
-    try {
-      final data = await _api.getSales();
-      setState(() => _sales = data);
-    } catch (e) {
-      throw Exception('Erreur ventes: ${e.toString()}');
-    }
-  }
-
-  Future<void> _loadProducts() async {
-    try {
-      final data = await _supabase.from('products').select('id, name, stock');
-      setState(() => _products = data);
-    } catch (e) {
-      throw Exception('Erreur produits: ${e.toString()}');
-    }
-  }
-
   Future<void> _calculateMonthlyTotals() async {
     final now = DateTime.now();
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
-    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
     final firstDayOfPreviousMonth = DateTime(now.year, now.month - 1, 1);
-    final lastDayOfPreviousMonth = DateTime(now.year, now.month, 0);
+    final lastDayOfPreviousMonth = DateTime(now.year, now.month, 0, 23, 59, 59);
 
-    _totalMoisActuel = await _getTotal(
-      'sales',
-      'sale_date',
-      firstDayOfMonth,
-      lastDayOfMonth,
-    );
-    _totalMoisPrecedent = await _getTotal(
-      'sales',
-      'sale_date',
+    _totalMoisActuel = await _getTotalLocal(firstDayOfMonth, lastDayOfMonth);
+    _totalMoisPrecedent = await _getTotalLocal(
       firstDayOfPreviousMonth,
       lastDayOfPreviousMonth,
     );
     _difference = _totalMoisActuel - _totalMoisPrecedent;
   }
 
-  Future<double> _getTotal(
-    String table,
-    String dateColumn,
-    DateTime start,
-    DateTime end,
-  ) async {
+  Future<double> _getTotalLocal(DateTime start, DateTime end) async {
     try {
       final res = await _supabase
-          .from(table)
+          .from('expenses')
           .select('amount')
-          .gte(dateColumn, start.toIso8601String())
-          .lte(dateColumn, end.toIso8601String());
+          .gte('expenses_date', start.toIso8601String())
+          .lte('expenses_date', end.toIso8601String());
 
       return res.fold<double>(
         0.0,
@@ -118,9 +85,8 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // --- 2. Logique de filtrage ---
-  List<Map<String, dynamic>> get _filteredSales {
-    var list = List<Map<String, dynamic>>.from(_sales);
+  List<Map<String, dynamic>> get _filteredExpenses {
+    var list = List<Map<String, dynamic>>.from(_expenses);
     final now = DateTime.now();
     DateTime periodStart;
     DateTime periodEnd = now.add(const Duration(days: 1));
@@ -136,8 +102,8 @@ class _SalesScreenState extends State<SalesScreen> {
         periodStart = DateTime(now.year, 1, 1);
     }
 
-    list = list.where((s) {
-      final dateStr = s['sale_date'] as String?;
+    list = list.where((e) {
+      final dateStr = e['expenses_date'] as String?;
       if (dateStr == null) return false;
       final date = DateTime.tryParse(dateStr);
       return date != null &&
@@ -145,22 +111,18 @@ class _SalesScreenState extends State<SalesScreen> {
           date.isBefore(periodEnd);
     }).toList();
 
-    if (_productFilter.isNotEmpty) {
-      final q = _productFilter.toLowerCase();
+    if (_descriptionFilter.isNotEmpty) {
+      final q = _descriptionFilter.toLowerCase();
       list = list
           .where(
-            (s) =>
-                (s['products']?['name'] as String?)?.toLowerCase().contains(
-                  q,
-                ) ??
-                false,
+            (e) => (e['name'] as String?)?.toLowerCase().contains(q) ?? false,
           )
           .toList();
     }
 
     if (_startDate != null || _endDate != null) {
-      list = list.where((s) {
-        final date = DateTime.tryParse(s['sale_date'] ?? '');
+      list = list.where((e) {
+        final date = DateTime.tryParse(e['expenses_date'] ?? '');
         if (date == null) return false;
         if (_startDate != null && date.isBefore(_startDate!)) return false;
         if (_endDate != null && date.isAfter(_endDate!)) return false;
@@ -168,77 +130,50 @@ class _SalesScreenState extends State<SalesScreen> {
       }).toList();
     }
 
-    if (_exactQuantity != null) {
-      list = list
-          .where((s) => (s['quantity'] as int?) == _exactQuantity)
-          .toList();
-    }
-
     list.sort((a, b) {
-      final da = DateTime.tryParse(a['sale_date'] ?? '') ?? DateTime(2000);
-      final db = DateTime.tryParse(b['sale_date'] ?? '') ?? DateTime(2000);
+      final da = DateTime.tryParse(a['expenses_date'] ?? '') ?? DateTime(2000);
+      final db = DateTime.tryParse(b['expenses_date'] ?? '') ?? DateTime(2000);
       return db.compareTo(da);
     });
 
     return list;
   }
 
-  // --- 3. Gestion du stock ---
-  Future<void> _updateProductStock(String productId, int quantityChange) async {
-    try {
-      final productRes = await _supabase
-          .from('products')
-          .select('stock')
-          .eq('id', productId)
-          .single();
-      final currentStock = (productRes['stock'] as int?) ?? 0;
-      await _supabase
-          .from('products')
-          .update({'stock': currentStock + quantityChange})
-          .eq('id', productId);
-    } catch (e) {
-      throw Exception('Erreur mise à jour stock: ${e.toString()}');
-    }
-  }
-
-  // --- 4. UI Helpers ---
   Color _getDiffColor(double diff) {
-    if (diff > 0) return AppColors.salesAccent;
-    if (diff < 0) return AppColors.error;
-    return AppColors.neutral;
+    if (diff > 0) return Colors.red.shade700;
+    if (diff < 0) return Colors.green.shade700;
+    return Colors.grey.shade700;
   }
 
   Map<String, Map<String, num>> _getMonthlyTotalsWithDiff() {
     final map = <String, Map<String, num>>{};
     final fmt = DateFormat('MMMM yyyy', 'fr_FR');
 
-    for (var s in _sales) {
-      final dateStr = s['sale_date'] as String?;
+    for (var e in _expenses) {
+      final dateStr = e['expenses_date'] as String?;
       if (dateStr == null) continue;
       final date = DateTime.tryParse(dateStr);
       if (date == null) continue;
       final key = fmt.format(date);
       map.putIfAbsent(key, () => {'amount': 0, 'diff': 0});
-      map[key]!['amount'] =
-          (map[key]!['amount']! + (s['amount'] as num? ?? 0)) as num;
+      map[key]!['amount'] = (map[key]!['amount']! + (e['amount'] as num? ?? 0));
     }
 
     final sortedKeys = map.keys.toList()
       ..sort((a, b) => fmt.parse(b).compareTo(fmt.parse(a)));
 
     for (int i = 0; i < sortedKeys.length - 1; i++) {
-      final current = map[sortedKeys[i]]!['amount']! as num;
-      final previous = map[sortedKeys[i + 1]]!['amount']! as num;
-      map[sortedKeys[i]]!['diff'] = (current - previous) as num;
+      final current = map[sortedKeys[i]]!['amount']!;
+      final previous = map[sortedKeys[i + 1]]!['amount']!;
+      map[sortedKeys[i]]!['diff'] = (current - previous);
     }
 
     return Map.fromEntries(sortedKeys.map((key) => MapEntry(key, map[key]!)));
   }
 
-  // --- 5. UI Build ---
   @override
   Widget build(BuildContext context) {
-    final total = _filteredSales.fold<num>(
+    final total = _filteredExpenses.fold<num>(
       0,
       (sum, item) => sum + (item['amount'] as num? ?? 0),
     );
@@ -247,18 +182,18 @@ class _SalesScreenState extends State<SalesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ventes'),
+        title: const Text('Dépenses'),
         actions: [
           IconButton(
             icon: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.salesLight,
+                color: Colors.orange.shade100,
               ),
               child: Icon(
                 Icons.filter_list,
-                color: AppColors.salesAccent,
+                color: Colors.orange.shade800,
                 size: 22,
               ),
             ),
@@ -287,7 +222,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 if (_selectedTab == 'Liste') ...[
                   _buildTotalCard(total, isSmall),
                   _buildPeriodFilterChips(),
-                  Expanded(child: _buildSalesList()),
+                  Expanded(child: _buildExpensesList()),
                 ] else ...[
                   Expanded(child: _buildCompactAnnualDashboard()),
                 ],
@@ -295,21 +230,20 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
       floatingActionButton: FloatingActionButton(
         mini: isSmall,
-        backgroundColor: AppColors.salesAccent,
+        backgroundColor: Colors.orange.shade700,
+        onPressed: _showAddExpenseForm,
         child: const Icon(Icons.add),
-        onPressed: _showAddSaleForm,
       ),
     );
   }
 
-  // --- Widgets UI ---
   Widget _buildTabButton(String label, bool selected) {
     return GestureDetector(
       onTap: () => setState(() => _selectedTab = label),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.salesAccent : Colors.transparent,
+          color: selected ? Colors.orange.shade700 : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Text(
@@ -326,28 +260,27 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildTotalCard(num total, bool isSmall) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.all(12.0),
       child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.green.shade50,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total ventes',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              Text(
+                'Total dépenses',
+                style: TextStyle(fontSize: isSmall ? 15 : 17),
               ),
-              const SizedBox(height: 12),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
                   formatCFA(total),
                   style: TextStyle(
-                    fontSize: 34,
+                    fontSize: isSmall ? 17 : 19,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green.shade800,
+                    color: Colors.orange.shade800,
                   ),
                 ),
               ),
@@ -372,8 +305,8 @@ class _SalesScreenState extends State<SalesScreen> {
                 label: Text(p, style: const TextStyle(fontSize: 13)),
                 selected: sel,
                 onSelected: (v) => setState(() => _selectedPeriod = p),
-                selectedColor: AppColors.salesAccent,
-                backgroundColor: AppColors.greyLight,
+                selectedColor: Colors.orange.shade700,
+                backgroundColor: Colors.grey.shade200,
                 labelStyle: TextStyle(
                   color: sel ? Colors.white : Colors.black87,
                 ),
@@ -386,53 +319,157 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _buildSalesList() {
-    final displayedList = _filteredSales;
+  Widget _buildExpensesList() {
+    final displayedList = _filteredExpenses;
     if (displayedList.isEmpty) {
-      return const Center(child: Text('Aucune vente trouvée'));
+      return const Center(child: Text('Aucune dépense trouvée'));
     }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
       itemCount: displayedList.length,
       itemBuilder: (context, index) {
-        final s = displayedList[index];
-        final name = s['products']?['name'] as String? ?? 'Inconnu';
-        final amount = s['amount'] as num? ?? 0.0;
-        final qty = s['quantity'] as num? ?? 0;
-        final locked = s['locked'] == true;
-        return CompactSaleCard(
-          productName: name,
-          amount: amount.toDouble(),
-          quantity: qty.toInt(),
-          date: s['sale_date']?.substring(0, 10) ?? '',
-          isLocked: locked,
-          onEdit: () => _showEditSaleDialog(s),
-          onDelete: () => _deleteSale(s),
-        );
+        final e = displayedList[index];
+        final name = e['name'] as String? ?? 'Sans nom';
+        final recipient = e['recipient'] as String? ?? 'Sans destinataire';
+        final amount = e['amount'] as num? ?? 0.0;
+        final locked = e['locked'] == true;
+        return _buildExpenseCard(e, name, recipient, amount, locked);
       },
+    );
+  }
+
+  Widget _buildExpenseCard(
+    Map<String, dynamic> e,
+    String name,
+    String recipient,
+    num amount,
+    bool locked,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.orange.shade100,
+              child: const Icon(
+                Icons.money_off,
+                color: Colors.orange,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: _buildExpenseInfo(e, name, recipient)),
+            SizedBox(
+              width: 140,
+              child: _buildExpenseActions(e, amount, locked),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpenseInfo(
+    Map<String, dynamic> e,
+    String name,
+    String recipient,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            height: 1.2,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          recipient,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          e['expenses_date']?.substring(0, 10) ?? '',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExpenseActions(Map<String, dynamic> e, num amount, bool locked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          formatCFA(amount),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: Colors.orange.shade800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock,
+              size: 18,
+              color: locked ? Colors.yellow.shade800 : Colors.grey.shade400,
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: const Icon(Icons.edit, size: 20),
+              color: Colors.blue.shade700,
+              onPressed: () => _showEditExpenseDialog(e),
+            ),
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: const Icon(Icons.delete, size: 20),
+              color: Colors.red.shade700,
+              onPressed: () => _deleteExpense(e),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildCompactAnnualDashboard() {
     final monthlyTotals = _getMonthlyTotalsWithDiff();
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Carte pour le total des ventes du mois
           Card(
             elevation: 3,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            color: Colors.green[50],
+            color: Colors.orange.shade50,
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
                   const Text(
-                    'Ventes du mois',
+                    'Dépenses du mois',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
@@ -443,7 +480,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.bold,
-                        color: Colors.green[800],
+                        color: Colors.orange.shade800,
                       ),
                     ),
                   ),
@@ -473,10 +510,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // Cartes mensuelles avec AnnualDashboardCard
           ...monthlyTotals.entries.map((entry) {
             final month = entry.key;
             final amount = entry.value['amount'] as num;
@@ -490,15 +524,14 @@ class _SalesScreenState extends State<SalesScreen> {
               previousAmount: (amount - diff).toDouble(),
               isIncrease: isIncrease,
               amountColor: diffColor,
-              backgroundColor: Colors.green[50]!,
+              backgroundColor: Colors.orange.shade50,
             );
-          }).toList(),
+          }),
         ],
       ),
     );
   }
 
-  // --- Dialogues ---
   void _showFilterBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -525,17 +558,17 @@ class _SalesScreenState extends State<SalesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Filtrer les ventes',
+                'Filtrer les dépenses',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               TextField(
                 decoration: const InputDecoration(
-                  labelText: 'Nom du produit (contient)',
+                  labelText: 'Nom (contient)',
                   border: OutlineInputBorder(),
                 ),
                 onChanged: (val) {
-                  setState(() => _productFilter = val.trim());
+                  setState(() => _descriptionFilter = val.trim());
                   setModalState(() {});
                 },
               ),
@@ -569,33 +602,19 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                decoration: const InputDecoration(
-                  labelText: 'Quantité exacte',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (val) {
-                  _exactQuantity = int.tryParse(val.trim());
-                  setState(() {});
-                  setModalState(() {});
-                },
-              ),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.error,
+                      backgroundColor: Colors.red.shade700,
                     ),
                     onPressed: () {
                       setState(() {
-                        _productFilter = '';
+                        _descriptionFilter = '';
                         _startDate = null;
                         _endDate = null;
-                        _exactQuantity = null;
                       });
                       setModalState(() {});
                       Navigator.pop(context);
@@ -635,46 +654,12 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _buildProductDropdown({
-    required List<Map<String, dynamic>> products,
-    required String? selectedProductId,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: DropdownButtonFormField<String>(
-        value: selectedProductId,
-        isExpanded: true,
-        menuMaxHeight: 300,
-        decoration: const InputDecoration(
-          labelText: 'Produit / Service *',
-          border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        ),
-        items: products.map((prod) {
-          final stock = prod['stock'] as int? ?? 0;
-          return DropdownMenuItem<String>(
-            value: prod['id'].toString(),
-            child: Text(
-              '${prod['name']} (stock: $stock)',
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          );
-        }).toList(),
-        onChanged: onChanged,
-      ),
-    );
-  }
-
-  // --- Méthodes pour les dialogues d'ajout/modification/suppression ---
-  Future<void> _showAddSaleForm() async {
-    String? selectedProductId;
-    final quantityCtrl = TextEditingController();
+  Future<void> _showAddExpenseForm() async {
+    final nameCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
-    final customerCtrl = TextEditingController();
-    DateTime saleDate = DateTime.now();
-    bool paid = true;
+    final recipientCtrl = TextEditingController();
+    DateTime expenseDate = DateTime.now();
+    bool locked = false;
 
     await showDialog<void>(
       context: context,
@@ -682,49 +667,23 @@ class _SalesScreenState extends State<SalesScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Ajouter une vente'),
+              title: const Text('Ajouter une dépense'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _supabase
-                          .from('products')
-                          .select('id, name, stock')
-                          .order('name'),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return const Text('Aucun produit disponible');
-                        }
-                        return _buildProductDropdown(
-                          products: snapshot.data!,
-                          selectedProductId: selectedProductId,
-                          onChanged: (val) =>
-                              setDialogState(() => selectedProductId = val),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
                     TextField(
-                      controller: quantityCtrl,
+                      controller: nameCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Quantité *',
+                        labelText: 'Nom *',
                         border: OutlineInputBorder(),
                       ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: amountCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Montant total (CFA) *',
+                        labelText: 'Montant *',
                         border: OutlineInputBorder(),
                         hintText: 'Exemple : 375000 ou 375.50',
                         helperText: 'Utilisez le point (.) pour les décimales',
@@ -750,163 +709,33 @@ class _SalesScreenState extends State<SalesScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    _buildDatePickerButton(
-                      context: context,
-                      label: DateFormat('dd/MM/yyyy').format(saleDate),
-                      onDateSelected: (picked) =>
-                          setDialogState(() => saleDate = picked),
-                    ),
-                    const SizedBox(height: 16),
                     TextField(
-                      controller: customerCtrl,
+                      controller: recipientCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Client (optionnel)',
+                        labelText: 'Destinataire',
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SwitchListTile(
-                      title: const Text('Payé (cash)'),
-                      value: paid,
-                      onChanged: (val) => setDialogState(() => paid = val),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Annuler'),
-                ),
-                ElevatedButton(
-                  onPressed: () => _handleAddSaleSubmit(
-                    dialogContext: dialogContext,
-                    selectedProductId: selectedProductId,
-                    quantityCtrl: quantityCtrl,
-                    amountCtrl: amountCtrl,
-                    customerCtrl: customerCtrl,
-                    saleDate: saleDate,
-                    paid: paid,
-                  ),
-                  child: const Text('Enregistrer'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _showEditSaleDialog(Map<String, dynamic> sale) async {
-    String? selectedProductId = sale['product_id'].toString();
-    final quantityCtrl = TextEditingController(
-      text: sale['quantity'].toString(),
-    );
-    final amountCtrl = TextEditingController(text: sale['amount'].toString());
-    final customerCtrl = TextEditingController(text: sale['customer'] ?? '');
-    DateTime saleDate =
-        DateTime.tryParse(sale['sale_date'] ?? '') ?? DateTime.now();
-    bool paid = sale['paid'] ?? true;
-    bool locked = sale['locked'] ?? false;
-    final oldQuantity = sale['quantity'] as int? ?? 0;
-    final oldProductId = sale['product_id'].toString();
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Modifier vente'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _supabase
-                          .from('products')
-                          .select('id, name, stock')
-                          .order('name'),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return const Text('Aucun produit disponible');
-                        }
-                        return _buildProductDropdown(
-                          products: snapshot.data!,
-                          selectedProductId: selectedProductId,
-                          onChanged: (val) =>
-                              setDialogState(() => selectedProductId = val),
+                    OutlinedButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: expenseDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
                         );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: quantityCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Quantité *',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: amountCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Montant total (CFA) *',
-                        border: OutlineInputBorder(),
-                        hintText: 'Exemple : 375000 ou 375.50',
-                        helperText: 'Utilisez le point (.) pour les décimales',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d*\.?\d{0,2}'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        final cleaned = value.replaceAll(',', '.');
-                        if (cleaned != value) {
-                          amountCtrl.value = amountCtrl.value.copyWith(
-                            text: cleaned,
-                            selection: TextSelection.collapsed(
-                              offset: cleaned.length,
-                            ),
-                          );
+                        if (picked != null) {
+                          setDialogState(() => expenseDate = picked);
                         }
                       },
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDatePickerButton(
-                      context: context,
-                      label: DateFormat('dd/MM/yyyy').format(saleDate),
-                      onDateSelected: (picked) =>
-                          setDialogState(() => saleDate = picked),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: customerCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Client (optionnel)',
-                        border: OutlineInputBorder(),
+                      child: Text(
+                        'Date: ${DateFormat('dd/MM/yyyy').format(expenseDate)}',
                       ),
                     ),
                     const SizedBox(height: 16),
                     SwitchListTile(
-                      title: const Text('Payé (cash)'),
-                      value: paid,
-                      onChanged: (val) => setDialogState(() => paid = val),
-                    ),
-                    SwitchListTile(
-                      title: const Text('Verrouillé'),
+                      title: const Text('Verrouiller'),
                       value: locked,
                       onChanged: (val) => setDialogState(() => locked = val),
                     ),
@@ -919,17 +748,191 @@ class _SalesScreenState extends State<SalesScreen> {
                   child: const Text('Annuler'),
                 ),
                 ElevatedButton(
-                  onPressed: () => _handleEditSaleSubmit(
+                  onPressed: () => _handleAddExpenseSubmit(
                     dialogContext: dialogContext,
-                    sale: sale,
-                    selectedProductId: selectedProductId,
-                    oldProductId: oldProductId,
-                    oldQuantity: oldQuantity,
-                    quantityCtrl: quantityCtrl,
+                    nameCtrl: nameCtrl,
                     amountCtrl: amountCtrl,
-                    customerCtrl: customerCtrl,
-                    saleDate: saleDate,
-                    paid: paid,
+                    recipientCtrl: recipientCtrl,
+                    expenseDate: expenseDate,
+                    locked: locked,
+                  ),
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _handleAddExpenseSubmit({
+    required BuildContext dialogContext,
+    required TextEditingController nameCtrl,
+    required TextEditingController amountCtrl,
+    required TextEditingController recipientCtrl,
+    required DateTime expenseDate,
+    required bool locked,
+  }) async {
+    if (nameCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nom et montant obligatoires')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final montantText = amountCtrl.text
+          .trim()
+          .replaceAll(',', '.')
+          .replaceAll(' ', '');
+      final amount = double.tryParse(montantText) ?? 0.0;
+
+      if (amount <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Montant invalide (ex. 375000 ou 375.50)'),
+            ),
+          );
+        }
+        return;
+      }
+
+      await _supabase.from('expenses').insert({
+        'name': nameCtrl.text.trim(),
+        'amount': amount,
+        'recipient': recipientCtrl.text.trim().isEmpty
+            ? null
+            : recipientCtrl.text.trim(),
+        'expenses_date': expenseDate.toIso8601String(),
+        'locked': locked,
+      });
+
+      if (mounted) {
+        await _loadData();
+        Navigator.pop(dialogContext);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dépense ajoutée avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur ajout : ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showEditExpenseDialog(Map<String, dynamic> expense) async {
+    final nameCtrl = TextEditingController(text: expense['name'] ?? '');
+    final amountCtrl = TextEditingController(
+      text: expense['amount'].toString(),
+    );
+    final recipientCtrl = TextEditingController(
+      text: expense['recipient'] ?? '',
+    );
+    DateTime expenseDate =
+        DateTime.tryParse(expense['expenses_date'] ?? '') ?? DateTime.now();
+    bool locked = expense['locked'] ?? false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Modifier dépense'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nom *',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Montant *',
+                        border: OutlineInputBorder(),
+                        hintText: 'Exemple : 375000 ou 375.50',
+                        helperText: 'Utilisez le point (.) pour les décimales',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        final cleaned = value.replaceAll(',', '.');
+                        if (cleaned != value) {
+                          amountCtrl.value = amountCtrl.value.copyWith(
+                            text: cleaned,
+                            selection: TextSelection.collapsed(
+                              offset: cleaned.length,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: recipientCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Destinataire',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: expenseDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => expenseDate = picked);
+                        }
+                      },
+                      child: Text(
+                        'Date: ${DateFormat('dd/MM/yyyy').format(expenseDate)}',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      title: const Text('Verrouiller'),
+                      value: locked,
+                      onChanged: (val) => setDialogState(() => locked = val),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _handleEditExpenseSubmit(
+                    dialogContext: dialogContext,
+                    expense: expense,
+                    nameCtrl: nameCtrl,
+                    amountCtrl: amountCtrl,
+                    recipientCtrl: recipientCtrl,
+                    expenseDate: expenseDate,
                     locked: locked,
                   ),
                   child: const Text('Modifier'),
@@ -942,13 +945,78 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Future<void> _deleteSale(Map<String, dynamic> sale) async {
+  Future<void> _handleEditExpenseSubmit({
+    required BuildContext dialogContext,
+    required Map<String, dynamic> expense,
+    required TextEditingController nameCtrl,
+    required TextEditingController amountCtrl,
+    required TextEditingController recipientCtrl,
+    required DateTime expenseDate,
+    required bool locked,
+  }) async {
+    if (nameCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nom et montant obligatoires')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final montantText = amountCtrl.text
+          .trim()
+          .replaceAll(',', '.')
+          .replaceAll(' ', '');
+      final amount = double.tryParse(montantText) ?? 0.0;
+
+      if (amount <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Montant invalide (ex. 375000 ou 375.50)'),
+            ),
+          );
+        }
+        return;
+      }
+
+      await _supabase
+          .from('expenses')
+          .update({
+            'name': nameCtrl.text.trim(),
+            'amount': amount,
+            'recipient': recipientCtrl.text.trim().isEmpty
+                ? null
+                : recipientCtrl.text.trim(),
+            'expenses_date': expenseDate.toIso8601String(),
+            'locked': locked,
+          })
+          .eq('id', expense['id']);
+
+      if (mounted) {
+        await _loadData();
+        Navigator.pop(dialogContext);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dépense modifiée avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur modification : ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteExpense(Map<String, dynamic> expense) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Supprimer vente ?'),
+        title: const Text('Supprimer dépense ?'),
         content: Text(
-          'Voulez-vous supprimer cette vente du ${sale['sale_date']?.substring(0, 10) ?? 'date inconnue'} ?',
+          'Voulez-vous supprimer cette dépense du ${expense['expenses_date']?.substring(0, 10) ?? 'date inconnue'} ?',
         ),
         actions: [
           TextButton(
@@ -966,230 +1034,18 @@ class _SalesScreenState extends State<SalesScreen> {
     if (confirm != true) return;
 
     try {
-      final quantity = sale['quantity'] as int? ?? 0;
-      final productId = sale['product_id'].toString();
-
-      await _supabase.from('sales').delete().eq('id', sale['id']);
-      await _updateProductStock(productId, quantity);
+      await _supabase.from('expenses').delete().eq('id', expense['id']);
 
       if (mounted) {
         await _loadData();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vente supprimée et stock remis')),
+          const SnackBar(content: Text('Dépense supprimée avec succès')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur suppression : ${e.toString()}')),
-        );
-      }
-    }
-  }
-
-  // --- Logique de soumission ---
-  Future<void> _handleAddSaleSubmit({
-    required BuildContext dialogContext,
-    required String? selectedProductId,
-    required TextEditingController quantityCtrl,
-    required TextEditingController amountCtrl,
-    required TextEditingController customerCtrl,
-    required DateTime saleDate,
-    required bool paid,
-  }) async {
-    if (selectedProductId == null ||
-        quantityCtrl.text.trim().isEmpty ||
-        amountCtrl.text.trim().isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Produit, quantité et montant obligatoires'),
-          ),
-        );
-      }
-      return;
-    }
-
-    try {
-      final quantity = int.parse(quantityCtrl.text.trim());
-      final montantText = amountCtrl.text
-          .trim()
-          .replaceAll(',', '.')
-          .replaceAll(' ', '');
-      final amount = double.tryParse(montantText) ?? 0.0;
-
-      if (amount <= 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Montant invalide (ex. 375000 ou 375.50)'),
-            ),
-          );
-        }
-        return;
-      }
-
-      final productRes = await _supabase
-          .from('products')
-          .select('stock')
-          .eq('id', selectedProductId)
-          .single();
-      final currentStock = (productRes['stock'] as int?) ?? 0;
-
-      if (quantity > currentStock) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Stock insuffisant ! Disponible : $currentStock'),
-            ),
-          );
-        }
-        return;
-      }
-
-      await _supabase.from('sales').insert({
-        'product_id': selectedProductId,
-        'quantity': quantity,
-        'amount': amount,
-        'sale_date': saleDate.toIso8601String(),
-        'customer': customerCtrl.text.trim().isEmpty
-            ? null
-            : customerCtrl.text.trim(),
-        'paid': paid,
-        'locked': false,
-      });
-
-      await _updateProductStock(selectedProductId, -quantity);
-
-      if (mounted) {
-        await _loadData();
-        Navigator.pop(dialogContext);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vente ajoutée avec succès')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur ajout : ${e.toString()}')),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleEditSaleSubmit({
-    required BuildContext dialogContext,
-    required Map<String, dynamic> sale,
-    required String? selectedProductId,
-    required String oldProductId,
-    required int oldQuantity,
-    required TextEditingController quantityCtrl,
-    required TextEditingController amountCtrl,
-    required TextEditingController customerCtrl,
-    required DateTime saleDate,
-    required bool paid,
-    required bool locked,
-  }) async {
-    if (selectedProductId == null ||
-        quantityCtrl.text.trim().isEmpty ||
-        amountCtrl.text.trim().isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Produit, quantité et montant obligatoires'),
-          ),
-        );
-      }
-      return;
-    }
-
-    try {
-      final quantity = int.parse(quantityCtrl.text.trim());
-      final montantText = amountCtrl.text
-          .trim()
-          .replaceAll(',', '.')
-          .replaceAll(' ', '');
-      final amount = double.tryParse(montantText) ?? 0.0;
-
-      if (amount <= 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Montant invalide (ex. 375000 ou 375.50)'),
-            ),
-          );
-        }
-        return;
-      }
-
-      // Restaurer l'ancien stock si le produit a changé
-      if (oldProductId != selectedProductId) {
-        final oldProductRes = await _supabase
-            .from('products')
-            .select('stock')
-            .eq('id', oldProductId)
-            .single();
-        final oldCurrentStock = (oldProductRes['stock'] as int?) ?? 0;
-        await _supabase
-            .from('products')
-            .update({'stock': oldCurrentStock + oldQuantity})
-            .eq('id', oldProductId);
-      }
-
-      // Vérifier le stock pour le nouveau produit
-      final productRes = await _supabase
-          .from('products')
-          .select('stock')
-          .eq('id', selectedProductId)
-          .single();
-      final currentStock = (productRes['stock'] as int?) ?? 0;
-      final adjustedStock =
-          (oldProductId == selectedProductId
-              ? currentStock + oldQuantity
-              : currentStock) -
-          quantity;
-
-      if (adjustedStock < 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Stock insuffisant après ajustement ! Disponible : ${currentStock + (oldProductId == selectedProductId ? oldQuantity : 0)}',
-              ),
-            ),
-          );
-        }
-        return;
-      }
-
-      await _supabase
-          .from('sales')
-          .update({
-            'product_id': selectedProductId,
-            'quantity': quantity,
-            'amount': amount,
-            'sale_date': saleDate.toIso8601String(),
-            'customer': customerCtrl.text.trim().isEmpty
-                ? null
-                : customerCtrl.text.trim(),
-            'paid': paid,
-            'locked': locked,
-          })
-          .eq('id', sale['id']);
-
-      await _updateProductStock(selectedProductId, -quantity);
-
-      if (mounted) {
-        await _loadData();
-        Navigator.pop(dialogContext);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vente modifiée et stock ajusté')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur modification : ${e.toString()}')),
         );
       }
     }

@@ -1,0 +1,127 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../../../data/models/sale_model.dart';
+import 'package:facil_count_nouveau/core/utils/formatters.dart';
+
+class SaleDashboard extends StatelessWidget {
+  final List<SaleModel> sales;
+
+  const SaleDashboard({super.key, required this.sales});
+
+  Map<String, double> _getMonthlyTotals() {
+    final totals = <String, double>{};
+    final fmt = DateFormat('MMMM yyyy', 'fr_FR');
+
+    for (final sale in sales) {
+      final key = fmt.format(sale.saleDate);
+      totals[key] = (totals[key] ?? 0) + sale.amount;
+    }
+
+    // Trier par date décroissante
+    final sortedKeys = totals.keys.toList()
+      ..sort((a, b) => fmt.parse(b).compareTo(fmt.parse(a)));
+
+    return Map.fromEntries(sortedKeys.map((k) => MapEntry(k, totals[k]!)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final monthlyTotals = _getMonthlyTotals();
+    final now = DateTime.now();
+
+    final currentMonthTotal = sales
+        .where(
+          (s) => s.saleDate.year == now.year && s.saleDate.month == now.month,
+        )
+        .fold<double>(0, (sum, s) => sum + s.amount);
+
+    final previousMonth = DateTime(now.year, now.month - 1, 1);
+    final previousMonthTotal = sales
+        .where(
+          (s) =>
+              s.saleDate.year == previousMonth.year &&
+              s.saleDate.month == previousMonth.month,
+        )
+        .fold<double>(0, (sum, s) => sum + s.amount);
+
+    final difference = currentMonthTotal - previousMonthTotal;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Carte mois actuel
+          Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            color: Colors.green.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Text(
+                    'Ventes du mois',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  // ✅ CORRIGÉ : Séparateur milliers
+                  Text(
+                    Formatters.formatCurrency(currentMonthTotal),
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        difference >= 0
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward,
+                        color: difference >= 0 ? Colors.green : Colors.red,
+                      ),
+                      const SizedBox(width: 6),
+                      // ✅ CORRIGÉ : Séparateur milliers
+                      Text(
+                        '${Formatters.formatCurrency(difference.abs())} vs mois préc.',
+                        style: TextStyle(
+                          color: difference >= 0 ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ✅ CORRIGÉ : Liste mensuelle avec séparateur milliers
+          ...monthlyTotals.entries.map((entry) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                title: Text(entry.key.toUpperCase()),
+                trailing: Text(
+                  // ✅ CORRIGÉ : entry.value au lieu de monthlyData[index]
+                  Formatters.formatCurrency(entry.value),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
