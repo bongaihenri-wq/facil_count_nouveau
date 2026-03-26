@@ -1,26 +1,30 @@
 import 'package:intl/intl.dart';
 
 class Formatters {
-  static final _currencyFormat = NumberFormat.currency(
-    locale: 'fr_FR',
-    symbol: '',
-    decimalDigits: 0,
-  );
-
-  static final _numberFormat = NumberFormat.decimalPattern('fr_FR');
-
-  /// Format : 1 234 567 CFA
   static String formatCurrency(double amount) {
-    return '${_currencyFormat.format(amount).trim()} CFA';
+    final formatter = NumberFormat('#,###', 'fr_FR');
+    return formatter.format(amount.abs());
   }
 
-  /// Format : 1 234 567
+  static String formatCompactCurrency(double amount) {
+    if (amount >= 1000000) {
+      return '${(amount / 1000000).toStringAsFixed(1)}M';
+    } else if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(1)}K';
+    }
+    return formatCurrency(amount);
+  }
+
   static String formatNumber(int number) {
-    return _numberFormat.format(number);
+    final formatter = NumberFormat('#,###', 'fr_FR');
+    return formatter.format(number);
   }
 
-  /// Format : 1 234,56
-  static String formatDecimal(double number) {
-    return _numberFormat.format(number);
+  static String formatDate(DateTime date) {
+    return DateFormat('dd/MM/yyyy', 'fr_FR').format(date);
+  }
+
+  static String formatDateTime(DateTime date) {
+    return DateFormat('dd/MM/yyyy HH:mm', 'fr_FR').format(date);
   }
 }

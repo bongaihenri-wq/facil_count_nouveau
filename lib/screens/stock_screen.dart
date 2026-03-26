@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:facil_count_nouveau/core/utils/format.dart';
+import '/../presentation/providers/stock_provider.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});

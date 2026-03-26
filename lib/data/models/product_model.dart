@@ -1,6 +1,5 @@
-import 'package:json_annotation/json_annotation.dart';
+import 'dart:ui';
 
-@JsonSerializable()
 class ProductModel {
   final String id;
   final String name;
@@ -58,7 +57,28 @@ class ProductModel {
     'created_at': createdAt.toIso8601String(),
   };
 
-  // 🔥 AJOUTER CECI pour que la sélection fonctionne :
+  ProductModel copyWith({
+    String? id,
+    String? name,
+    String? category,
+    String? supplier,
+    int? initialStock,
+    int? lowStockThreshold,
+    int? currentStock,
+    DateTime? createdAt,
+  }) {
+    return ProductModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      supplier: supplier ?? this.supplier,
+      initialStock: initialStock ?? this.initialStock,
+      lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
+      currentStock: currentStock ?? this.currentStock,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -70,9 +90,21 @@ class ProductModel {
   int get hashCode => id.hashCode;
 }
 
+// Extensions utilitaires
 extension ProductModelX on ProductModel {
-  bool get isLowStock => currentStock <= lowStockThreshold;
+  bool get isLowStock => currentStock <= lowStockThreshold && currentStock > 0;
   bool get isOutOfStock => currentStock <= 0;
-  String get stockStatus =>
-      isOutOfStock ? 'Rupture' : (isLowStock ? 'Bas' : 'OK');
+  bool get isOkStock => currentStock > lowStockThreshold;
+
+  String get stockStatus {
+    if (isOutOfStock) return 'Rupture';
+    if (isLowStock) return 'Stock Bas';
+    return 'OK';
+  }
+
+  Color get stockColor {
+    if (isOutOfStock) return const Color(0xFFE53935); // Rouge
+    if (isLowStock) return const Color(0xFFFB8C00); // Orange
+    return const Color(0xFF43A047); // Vert
+  }
 }
