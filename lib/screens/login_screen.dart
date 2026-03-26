@@ -1,4 +1,4 @@
-import 'package:facil_count_nouveau/screens/home_screen.dart';
+import 'package:facil_count_nouveau/presentation/screens/home/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:facil_count_nouveau/core/services/auth_service.dart';
 import 'package:facil_count_nouveau/screens/register_screen.dart';
