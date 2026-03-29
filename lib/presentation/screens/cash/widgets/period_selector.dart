@@ -1,80 +1,96 @@
+// lib/presentation/screens/cash/widgets/period_selector.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class PeriodSelector extends StatelessWidget {
-  final String selectedPeriod;
   final DateTime selectedDate;
-  final Function(String) onPeriodChanged;
   final Function(DateTime) onDateChanged;
 
   const PeriodSelector({
     super.key,
-    required this.selectedPeriod,
     required this.selectedDate,
-    required this.onPeriodChanged,
     required this.onDateChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isToday = _isToday(selectedDate);
+    
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            // Sélecteur de période
-            Expanded(
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'Jour', label: Text('Jour')),
-                  ButtonSegment(value: 'Semaine', label: Text('Sem.')),
-                  ButtonSegment(value: 'Mois', label: Text('Mois')),
-                  ButtonSegment(value: 'Année', label: Text('Année')),
-                ],
-                selected: {selectedPeriod},
-                onSelectionChanged: (Set<String> newSelection) {
-                  onPeriodChanged(newSelection.first);
-                },
-                style: ButtonStyle(
-                  padding: MaterialStateProperty.all(
-                    const EdgeInsets.symmetric(horizontal: 8),
-                  ),
+      child: InkWell(
+        onTap: () => _selectDate(context),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.calendar_today,
+                size: 20,
+                color: Colors.blue.shade700,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Date d\'arrêt',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isToday ? "Aujourd'hui" : _formatDate(selectedDate),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            // Sélecteur de date
-            IconButton(
-              onPressed: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: selectedDate,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now(),
-                );
-                if (picked != null) onDateChanged(picked);
-              },
-              icon: const Icon(Icons.calendar_today, size: 20),
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.blue.shade50,
-                foregroundColor: Colors.blue.shade700,
+              Icon(
+                Icons.chevron_right,
+                color: Colors.blue.shade400,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  String _formatDate() {
+  bool _isToday(DateTime date) {
     final now = DateTime.now();
-    if (selectedDate.year == now.year &&
-        selectedDate.month == now.month &&
-        selectedDate.day == now.day) {
-      return "Aujourd'hui";
+    return date.year == now.year && 
+           date.month == now.month && 
+           date.day == now.day;
+  }
+
+  String _formatDate(DateTime date) {
+    return DateFormat('dd MMMM yyyy', 'fr').format(date);
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      helpText: 'Voir le solde au',
+      cancelText: 'Annuler',
+      confirmText: 'Valider',
+      locale: const Locale('fr'),
+    );
+    if (picked != null) {
+      onDateChanged(picked);
     }
-    return DateFormat('dd/MM/yyyy').format(selectedDate);
   }
 }

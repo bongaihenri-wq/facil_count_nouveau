@@ -1,3 +1,5 @@
+// lib/data/repositories/product_repository.dart
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product_model.dart';
 
@@ -7,42 +9,69 @@ class ProductRepository {
   ProductRepository(this._client);
 
   Future<List<ProductModel>> getProducts() async {
-    final data = await _client
+    // Récupère tous les produits
+    final productsData = await _client
         .from('products')
-        .select('''
-          id,
-          name,
-          category,
-          supplier,
-          initial_stock,
-          low_stock_threshold,
-          created_at,
-          current_stock:product_current_stock(current_stock)
-        ''')
+        .select('id, name, category, supplier, initial_stock, low_stock_threshold, created_at')
         .order('name');
 
-    return (data as List<dynamic>).map((json) {
-      final productJson = json as Map<String, dynamic>;
-      final currentStock = productJson['current_stock']?['current_stock'] ?? 0;
+    if (productsData.isEmpty) return [];
+
+    final productIds = productsData.map((p) => p['id'] as String).toList();
+
+    // Récupère tous les achats en UNE requête
+    final allPurchases = await _client
+        .from('purchases')
+        .select('product_id, quantity')
+        .inFilter('product_id', productIds);
+
+    // Récupère toutes les ventes en UNE requête
+    final allSales = await _client
+        .from('sales')
+        .select('product_id, quantity')
+        .inFilter('product_id', productIds);
+
+    // Calcule les stocks
+    return productsData.map((productJson) {
+      final productId = productJson['id'] as String;
+      final initialStock = (productJson['initial_stock'] as num?)?.toInt() ?? 0;
+
+      // Somme des achats
+      final productPurchases = allPurchases.where((p) => p['product_id'] == productId);
+      final totalPurchases = productPurchases.fold<int>(
+        0, (sum, p) => sum + ((p['quantity'] as num?)?.toInt() ?? 0),
+      );
+
+      // Somme des ventes
+      final productSales = allSales.where((s) => s['product_id'] == productId);
+      final totalSales = productSales.fold<int>(
+        0, (sum, s) => sum + ((s['quantity'] as num?)?.toInt() ?? 0),
+      );
+
+      final realStock = initialStock + totalPurchases - totalSales;
 
       return ProductModel.fromJson({
         'id': productJson['id'],
         'name': productJson['name'],
         'category': productJson['category'],
         'supplier': productJson['supplier'],
-        'initial_stock': productJson['initial_stock'] ?? 0,
-        'low_stock_threshold': productJson['low_stock_threshold'] ?? 10,
-        'current_stock': currentStock,
+        'initial_stock': initialStock,
+        'low_stock_threshold': (productJson['low_stock_threshold'] as num?)?.toInt() ?? 10,
+        'current_stock': realStock, // ← UNDERSCORE ICI
         'created_at': productJson['created_at'],
       });
     }).toList();
   }
 
   Future<ProductModel?> getProductById(String id) async {
-    // ... identique ...
+    final products = await getProducts();
+    try {
+      return products.firstWhere((p) => p.id == id);
+    } catch (e) {
+      return null;
+    }
   }
 
-  // ✅ AJOUTER : Créer un produit
   Future<ProductModel> createProduct({
     required String name,
     required String category,
@@ -62,10 +91,19 @@ class ProductRepository {
         .select()
         .single();
 
-    return ProductModel.fromJson(data as Map<String, dynamic>);
+    // ✅ CORRIGÉ : Utilise 'current_stock' avec underscore
+    return ProductModel.fromJson({
+      'id': data['id'],
+      'name': data['name'],
+      'category': data['category'],
+      'supplier': data['supplier'],
+      'initial_stock': data['initial_stock'],
+      'low_stock_threshold': data['low_stock_threshold'],
+      'current_stock': initialStock, // ← UNDERSCORE !
+      'created_at': data['created_at'],
+    });
   }
 
-  // ✅ AJOUTER : Modifier un produit
   Future<void> updateProduct({
     required String id,
     String? name,
@@ -73,7 +111,6 @@ class ProductRepository {
     String? supplier,
     int? initialStock,
     int? lowStockThreshold,
-    int? currentStock, // AJOUTER
   }) async {
     final updates = <String, dynamic>{};
 
@@ -84,23 +121,18 @@ class ProductRepository {
     if (lowStockThreshold != null) {
       updates['low_stock_threshold'] = lowStockThreshold;
     }
-    if (currentStock != null) {
-      updates['current_stock'] = currentStock; // AJOUTER
-    }
 
     await _client.from('products').update(updates).eq('id', id);
   }
 
-  // ✅ AJOUTER : Supprimer un produit
   Future<void> deleteProduct(String id) async {
     await _client.from('products').delete().eq('id', id);
   }
-
-  // ✅ AJOUTER : Mettre à jour le stock (pour l'écran Stock)
-  Future<void> updateStock(String productId, int newStock) async {
-    await _client.rpc(
-      'update_product_stock',
-      params: {'p_product_id': productId, 'p_new_stock': newStock},
-    );
-  }
+  // Dans product_repository.dart
+Future<void> updateStockManual(String productId, int newStock) async {
+  // Met à jour le stock initial pour forcer le calcul
+  await _client.from('products').update({
+    'initial_stock': newStock,
+  }).eq('id', productId);
+}
 }

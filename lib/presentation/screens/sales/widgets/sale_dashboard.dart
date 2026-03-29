@@ -17,7 +17,6 @@ class SaleDashboard extends StatelessWidget {
       totals[key] = (totals[key] ?? 0) + sale.amount;
     }
 
-    // Trier par date décroissante
     final sortedKeys = totals.keys.toList()
       ..sort((a, b) => fmt.parse(b).compareTo(fmt.parse(a)));
 
@@ -30,18 +29,14 @@ class SaleDashboard extends StatelessWidget {
     final now = DateTime.now();
 
     final currentMonthTotal = sales
-        .where(
-          (s) => s.saleDate.year == now.year && s.saleDate.month == now.month,
-        )
+        .where((s) => s.saleDate.year == now.year && s.saleDate.month == now.month)
         .fold<double>(0, (sum, s) => sum + s.amount);
 
     final previousMonth = DateTime(now.year, now.month - 1, 1);
     final previousMonthTotal = sales
-        .where(
-          (s) =>
-              s.saleDate.year == previousMonth.year &&
-              s.saleDate.month == previousMonth.month,
-        )
+        .where((s) =>
+            s.saleDate.year == previousMonth.year &&
+            s.saleDate.month == previousMonth.month)
         .fold<double>(0, (sum, s) => sum + s.amount);
 
     final difference = currentMonthTotal - previousMonthTotal;
@@ -50,7 +45,6 @@ class SaleDashboard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Carte mois actuel
           Card(
             elevation: 3,
             shape: RoundedRectangleBorder(
@@ -66,7 +60,6 @@ class SaleDashboard extends StatelessWidget {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
-                  // ✅ CORRIGÉ : Séparateur milliers
                   Text(
                     Formatters.formatCurrency(currentMonthTotal),
                     style: TextStyle(
@@ -86,7 +79,6 @@ class SaleDashboard extends StatelessWidget {
                         color: difference >= 0 ? Colors.green : Colors.red,
                       ),
                       const SizedBox(width: 6),
-                      // ✅ CORRIGÉ : Séparateur milliers
                       Text(
                         '${Formatters.formatCurrency(difference.abs())} vs mois préc.',
                         style: TextStyle(
@@ -100,17 +92,13 @@ class SaleDashboard extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // ✅ CORRIGÉ : Liste mensuelle avec séparateur milliers
           ...monthlyTotals.entries.map((entry) {
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 title: Text(entry.key.toUpperCase()),
                 trailing: Text(
-                  // ✅ CORRIGÉ : entry.value au lieu de monthlyData[index]
                   Formatters.formatCurrency(entry.value),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,

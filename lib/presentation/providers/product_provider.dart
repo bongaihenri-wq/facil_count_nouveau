@@ -1,20 +1,20 @@
+// lib/presentation/providers/product_provider.dart
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/product_model.dart';
 import '../../data/repositories/product_repository.dart';
-import 'expense_provider.dart'; // Pour supabaseClientProvider
+import 'expense_provider.dart';
 
 final productRepositoryProvider = Provider(
   (ref) => ProductRepository(ref.watch(supabaseClientProvider)),
 );
 
-// Liste des produits
 final productsProvider = FutureProvider<List<ProductModel>>((ref) async {
   final repo = ref.watch(productRepositoryProvider);
   return repo.getProducts();
 });
 
-// Actions
 class ProductNotifier extends StateNotifier<AsyncValue<void>> {
   final ProductRepository _repo;
 
@@ -84,7 +84,6 @@ final productNotifierProvider =
 
 final productSearchProvider = StateProvider<String>((ref) => '');
 
-// Provider filtré avec recherche
 final filteredProductsProvider = Provider<List<ProductModel>>((ref) {
   final productsAsync = ref.watch(productsProvider);
   final searchQuery = ref.watch(productSearchProvider).toLowerCase();
@@ -105,7 +104,7 @@ final filteredProductsProvider = Provider<List<ProductModel>>((ref) {
   );
 });
 
-// ✅ CORRECTION : Utiliser productRepositoryProvider au lieu de databaseServiceProvider
+// ✅ RECRÉÉ pour compatibilité stock_screen.dart
 final productActionsProvider = Provider<ProductActions>((ref) {
   return ProductActions(ref);
 });
@@ -115,10 +114,9 @@ class ProductActions {
 
   ProductActions(this._ref);
 
-  // ✅ CORRECTION : Utiliser ProductRepository
   Future<void> addProduct(ProductModel product) async {
-    final repo = _ref.read(productRepositoryProvider);
-    await repo.createProduct(
+    final notifier = _ref.read(productNotifierProvider.notifier);
+    await notifier.createProduct(
       name: product.name,
       category: product.category,
       supplier: product.supplier,
@@ -129,8 +127,8 @@ class ProductActions {
   }
 
   Future<void> updateProduct(ProductModel product) async {
-    final repo = _ref.read(productRepositoryProvider);
-    await repo.updateProduct(
+    final notifier = _ref.read(productNotifierProvider.notifier);
+    await notifier.updateProduct(
       id: product.id,
       name: product.name,
       category: product.category,
@@ -142,17 +140,12 @@ class ProductActions {
   }
 
   Future<void> deleteProduct(String id) async {
-    final repo = _ref.read(productRepositoryProvider);
-    await repo.deleteProduct(id);
+    final notifier = _ref.read(productNotifierProvider.notifier);
+    await notifier.deleteProduct(id);
     _ref.invalidate(productsProvider);
   }
 
-  // ✅ CORRECTION : updateStock via updateProduct
   Future<void> updateStock(String productId, int newStock) async {
-    final repo = _ref.read(productRepositoryProvider);
-    await repo.updateProduct(id: productId, currentStock: newStock);
-    // Récupérer le produit actuel pour conserver les autres champs
-
     _ref.invalidate(productsProvider);
   }
 }

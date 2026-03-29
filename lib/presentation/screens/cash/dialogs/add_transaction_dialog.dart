@@ -1,21 +1,27 @@
+// lib/presentation/screens/cash/dialogs/add_transaction_dialog.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import '/../presentation/providers/cash_provider.dart';
+import '../../../providers/cash_provider.dart';
+import '../../../../data/models/cash_models.dart';
 
 void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
   final formKey = GlobalKey<FormState>();
-  String selectedType = 'bank_deposit';
+  TransactionType selectedType = TransactionType.sale;
   final amountCtrl = TextEditingController();
   final descCtrl = TextEditingController();
   DateTime selectedDate = DateTime.now();
 
-  // Couleurs par type
-  final Map<String, Color> typeColors = {
-    'bank_deposit': Colors.blue,
-    'withdrawal': Colors.orange,
-    'owner_transfer': Colors.purple,
-  };
+  final List<Map<String, dynamic>> types = [
+    {'type': TransactionType.sale, 'label': 'Vente', 'icon': Icons.point_of_sale, 'color': Colors.green},
+    {'type': TransactionType.purchase, 'label': 'Achat', 'icon': Icons.shopping_cart, 'color': Colors.orange},
+    {'type': TransactionType.expense, 'label': 'Dépense', 'icon': Icons.receipt_long, 'color': Colors.red},
+    {'type': TransactionType.contribution, 'label': 'Apport', 'icon': Icons.add_circle, 'color': Colors.blue},
+    {'type': TransactionType.bankDeposit, 'label': 'Versement Banque', 'icon': Icons.account_balance, 'color': Colors.indigo},
+    {'type': TransactionType.withdrawal, 'label': 'Retrait', 'icon': Icons.payments, 'color': Colors.purple},
+    {'type': TransactionType.ownerTransfer, 'label': 'Remis Gérant', 'icon': Icons.person, 'color': Colors.teal},
+  ];
 
   showModalBottomSheet(
     context: context,
@@ -25,7 +31,7 @@ void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
     ),
     builder: (context) => StatefulBuilder(
       builder: (context, setState) {
-        final selectedColor = typeColors[selectedType]!;
+        final selectedColor = selectedType.color;
 
         return Padding(
           padding: EdgeInsets.only(
@@ -60,44 +66,23 @@ void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
                   ),
                   const SizedBox(height: 24),
 
-                  // Type de transaction - BOUTONS COLORÉS
+                  // Types de transaction - GRID 2 colonnes
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     alignment: WrapAlignment.center,
-                    children: [
-                      _buildTypeChip(
-                        label: 'Versement Banque',
-                        icon: Icons.account_balance,
-                        value: 'bank_deposit',
-                        color: Colors.blue,
-                        isSelected: selectedType == 'bank_deposit',
-                        onTap: () =>
-                            setState(() => selectedType = 'bank_deposit'),
-                      ),
-                      _buildTypeChip(
-                        label: 'Retrait',
-                        icon: Icons.payments,
-                        value: 'withdrawal',
-                        color: Colors.orange,
-                        isSelected: selectedType == 'withdrawal',
-                        onTap: () =>
-                            setState(() => selectedType = 'withdrawal'),
-                      ),
-                      _buildTypeChip(
-                        label: 'Remis Gérant',
-                        icon: Icons.person,
-                        value: 'owner_transfer',
-                        color: Colors.purple,
-                        isSelected: selectedType == 'owner_transfer',
-                        onTap: () =>
-                            setState(() => selectedType = 'owner_transfer'),
-                      ),
-                    ],
+                    children: types.map((t) => _buildTypeChip(
+                      label: t['label'],
+                      icon: t['icon'],
+                      type: t['type'],
+                      color: t['color'],
+                      isSelected: selectedType == t['type'],
+                      onTap: () => setState(() => selectedType = t['type']),
+                    )).toList(),
                   ),
                   const SizedBox(height: 20),
 
-                  // Montant avec couleur dynamique
+                  // Montant
                   TextFormField(
                     controller: amountCtrl,
                     decoration: InputDecoration(
@@ -112,27 +97,16 @@ void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: selectedColor),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: selectedColor.withOpacity(0.5),
-                        ),
-                      ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: selectedColor, width: 2),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(Icons.clear, color: selectedColor),
-                        onPressed: () => amountCtrl.clear(),
                       ),
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     validator: (value) {
                       if (value == null || value.isEmpty) return 'Champ requis';
-                      if (double.tryParse(value) == null)
-                        return 'Montant invalide';
+                      if (double.tryParse(value) == null) return 'Montant invalide';
                       return null;
                     },
                   ),
@@ -151,7 +125,7 @@ void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
                   ),
                   const SizedBox(height: 16),
 
-                  // Date avec couleur
+                  // Date
                   ListTile(
                     leading: Icon(Icons.calendar_today, color: selectedColor),
                     title: const Text('Date'),
@@ -175,7 +149,7 @@ void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
                   ),
                   const SizedBox(height: 24),
 
-                  // Boutons d'action
+                  // Boutons
                   Row(
                     children: [
                       Expanded(
@@ -198,24 +172,18 @@ void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
 
                             final amount = double.parse(amountCtrl.text);
 
-                            await ref
-                                .read(cashProvider.notifier)
-                                .addTransaction(
-                                  type: selectedType,
-                                  amount: amount,
-                                  description: descCtrl.text.isEmpty
-                                      ? null
-                                      : descCtrl.text,
-                                  date: selectedDate,
-                                );
+                            await ref.read(cashProvider.notifier).addTransaction(
+                              type: selectedType,
+                              amount: amount,
+                              description: descCtrl.text.isEmpty ? null : descCtrl.text,
+                              date: selectedDate,
+                            );
 
                             if (context.mounted) {
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: const Text(
-                                    'Transaction enregistrée',
-                                  ),
+                                  content: Text('${selectedType.label} enregistrée'),
                                   backgroundColor: selectedColor,
                                 ),
                               );
@@ -245,12 +213,11 @@ void showAddTransactionDialog(BuildContext context, WidgetRef ref) {
   );
 }
 
-// Widget pour les chips de type avec couleurs distinctes
 Widget _buildTypeChip({
   required String label,
   required IconData icon,
-  required String value,
-  required MaterialColor color,
+  required TransactionType type,
+  required Color color,
   required bool isSelected,
   required VoidCallback onTap,
 }) {
@@ -265,6 +232,7 @@ Widget _buildTypeChip({
           style: TextStyle(
             color: isSelected ? Colors.white : Colors.black87,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
           ),
         ),
       ],

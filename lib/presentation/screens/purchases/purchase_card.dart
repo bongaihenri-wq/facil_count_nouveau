@@ -1,6 +1,6 @@
 import 'package:facil_count_nouveau/data/models/purchase_model.dart';
 import 'package:flutter/material.dart';
-import '../../../data/models/purchase_model.dart';
+import '/../../../data/models/purchase_model.dart';
 
 class PurchaseCard extends StatelessWidget {
   final PurchaseModel purchase;

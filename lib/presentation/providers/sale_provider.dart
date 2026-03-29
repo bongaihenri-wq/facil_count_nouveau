@@ -2,14 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/sale_model.dart';
 import '../../data/repositories/sale_repository.dart';
-import 'expense_provider.dart'; // Pour supabaseClientProvider
-import 'product_provider.dart'; // Pour productsProvider
+import 'expense_provider.dart';
+import 'product_provider.dart';
 
 final saleRepositoryProvider = Provider(
   (ref) => SaleRepository(ref.watch(supabaseClientProvider)),
 );
 
-// Sales list
+// Sales list - AsyncValue
 final salesProvider = FutureProvider<List<SaleModel>>((ref) async {
   final repo = ref.watch(saleRepositoryProvider);
   return repo.getSales();
@@ -89,6 +89,7 @@ class SaleFilters {
   final DateTime? endDate;
   final int? minQuantity;
   final int? maxQuantity;
+  final String? period;  // ← AJOUTÉ
 
   const SaleFilters({
     this.productId,
@@ -96,6 +97,7 @@ class SaleFilters {
     this.endDate,
     this.minQuantity,
     this.maxQuantity,
+    this.period,  // ← AJOUTÉ
   });
 
   bool get isActive =>
@@ -103,7 +105,8 @@ class SaleFilters {
       startDate != null ||
       endDate != null ||
       minQuantity != null ||
-      maxQuantity != null;
+      maxQuantity != null ||
+      period != null;  // ← AJOUTÉ
 
   SaleFilters copyWith({
     String? productId,
@@ -111,12 +114,14 @@ class SaleFilters {
     DateTime? endDate,
     int? minQuantity,
     int? maxQuantity,
+    String? period,  // ← AJOUTÉ
   }) => SaleFilters(
     productId: productId ?? this.productId,
     startDate: startDate ?? this.startDate,
     endDate: endDate ?? this.endDate,
     minQuantity: minQuantity ?? this.minQuantity,
     maxQuantity: maxQuantity ?? this.maxQuantity,
+    period: period ?? this.period,  // ← AJOUTÉ
   );
 }
 
@@ -147,12 +152,12 @@ final saleFiltersProvider =
       return SaleFiltersNotifier();
     });
 
-// Mettez à jour filteredSalesProvider :
+// ⭐ GARDÉ COMME PROVIDER SIMPLE - Liste directe, pas AsyncValue
 final filteredSalesProvider = Provider<List<SaleModel>>((ref) {
   final allSales = ref.watch(salesProvider).valueOrNull ?? [];
   final filters = ref.watch(saleFiltersProvider);
 
-  print('Filtres actifs: ${filters.isActive}'); // Debug
+  print('Filtres actifs: ${filters.isActive}');
 
   return allSales.where((sale) {
     if (filters.productId != null && sale.productId != filters.productId) {

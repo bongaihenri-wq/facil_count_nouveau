@@ -7,10 +7,9 @@ import 'sale_card.dart';
 import '../dialogs/edit_sale_dialog.dart';
 import '../../../providers/product_provider.dart';
 
-// Provider pour la période sélectionnée
 final selectedPeriodProvider = StateProvider<String>((ref) => 'Mois');
 
-class SaleList extends ConsumerWidget {
+class SaleList extends StatelessWidget {
   final List<SaleModel> sales;
 
   const SaleList({super.key, required this.sales});
@@ -35,156 +34,143 @@ class SaleList extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedPeriod = ref.watch(selectedPeriodProvider);
-    final allSales = ref.watch(filteredSalesProvider);
-    final filteredSales = _filterByPeriod(allSales, selectedPeriod);
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final selectedPeriod = ref.watch(selectedPeriodProvider);
+        final filteredSales = _filterByPeriod(sales, selectedPeriod);
 
-    if (filteredSales.isEmpty) {
-      return const Center(child: Text('Aucune vente trouvée'));
-    }
+        if (filteredSales.isEmpty) {
+          return _buildEmptyState(context, ref);
+        }
 
-    final total = filteredSales.fold<double>(0, (sum, s) => sum + s.amount);
+        final total = filteredSales.fold<double>(0, (sum, s) => sum + s.amount);
 
-    return Column(
-      children: [
-        // Carte Total
-        _buildTotalCard(total),
-        // Filtres période
-        _buildPeriodFilterChips(ref, selectedPeriod),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-            itemCount: filteredSales.length,
-            itemBuilder: (context, index) => SaleCard(
-              sale: filteredSales[index],
-              onEdit: () => _showEditDialog(context, ref, filteredSales[index]),
-              onDelete: () =>
-                  _confirmDelete(context, ref, filteredSales[index]),
+        return Column(
+          children: [
+            _buildTotalCard(total),
+            _buildPeriodFilterChips(ref, selectedPeriod),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                itemCount: filteredSales.length,
+                itemBuilder: (context, index) => SaleCard(
+                  sale: filteredSales[index],
+                  onEdit: () => _showEditDialog(context, ref, filteredSales[index]),
+                  onDelete: () => _confirmDelete(context, ref, filteredSales[index]),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.filter_alt_off, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          const Text(
+            'Aucune vente pour cette période',
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              ref.read(selectedPeriodProvider.notifier).state = 'Tout';
+            },
+            icon: const Icon(Icons.clear),
+            label: const Text('Voir toutes les ventes'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildTotalCard(double total) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.green.shade50,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              const Text(
-                'Total ventes',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+    return Card(
+      margin: const EdgeInsets.all(12),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Total période',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              Formatters.formatCurrency(total),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
               ),
-              const SizedBox(height: 12),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  // ✅ CORRIGÉ : Un seul argument
-                  Formatters.formatCurrency(total),
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade800,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // Filtres période
   Widget _buildPeriodFilterChips(WidgetRef ref, String selectedPeriod) {
+    final periods = ['Semaine', 'Mois', 'Année', 'Tout'];
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: ['Semaine', 'Mois', 'Année'].map((period) {
-            final isSelected = period == selectedPeriod;
-            return Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: FilterChip(
-                label: Text(period, style: const TextStyle(fontSize: 13)),
-                selected: isSelected,
-                onSelected: (_) =>
-                    ref.read(selectedPeriodProvider.notifier).state = period,
-                selectedColor: Colors.green.shade700,
-                backgroundColor: Colors.grey.shade200,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black87,
-                ),
-                visualDensity: VisualDensity.compact,
-              ),
-            );
-          }).toList(),
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Wrap(
+        spacing: 8,
+        children: periods.map((period) {
+          final isSelected = selectedPeriod == period;
+          return ChoiceChip(
+            label: Text(period),
+            selected: isSelected,
+            selectedColor: Colors.green.shade100,
+            onSelected: (_) {
+              ref.read(selectedPeriodProvider.notifier).state = period;
+            },
+          );
+        }).toList(),
       ),
     );
   }
 
   void _showEditDialog(BuildContext context, WidgetRef ref, SaleModel sale) {
-    if (sale.locked) {
-      // Afficher dialogue verrouillé directement
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.lock, color: Colors.orange),
-              const SizedBox(width: 8),
-              const Text('Vente verrouillée'),
-            ],
-          ),
-          content: const Text(
-            'Cette vente est verrouillée et ne peut pas être modifiée.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Fermer'),
-            ),
-          ],
-        ),
-      );
-    } else {
-      // Édition normale
-      showEditSaleDialog(context, sale);
-    }
+    showEditSaleDialog(context, sale);
   }
-}
 
-void _confirmDelete(BuildContext context, WidgetRef ref, SaleModel sale) {
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Supprimer ?'),
-      content: Text('${sale.productName} - ${sale.formattedAmount}'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Annuler'),
-        ),
-        TextButton(
-          onPressed: () async {
-            await ref.read(saleNotifierProvider.notifier).deleteSale(sale);
-            ref.invalidate(salesProvider);
-            ref.invalidate(productsProvider);
-            if (context.mounted) Navigator.pop(ctx);
-          },
-          child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
-        ),
-      ],
-    ),
-  );
+  void _confirmDelete(BuildContext context, WidgetRef ref, SaleModel sale) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: const Text('Voulez-vous vraiment supprimer cette vente ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await ref.read(saleNotifierProvider.notifier).deleteSale(sale);
+              ref.invalidate(salesProvider);
+              ref.invalidate(productsProvider);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 }

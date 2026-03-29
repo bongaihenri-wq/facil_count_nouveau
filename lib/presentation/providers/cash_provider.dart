@@ -6,37 +6,7 @@ final cashProvider = StateNotifierProvider<CashNotifier, AsyncValue<CashState>>(
   (ref) => CashNotifier(),
 );
 
-class CashState {
-  final CashSummary summary;
-  final List<DebtInfo> customerDebts;
-  final List<DebtInfo> supplierDebts;
-  final String selectedPeriod;
-  final DateTime selectedDate;
 
-  CashState({
-    required this.summary,
-    this.customerDebts = const [],
-    this.supplierDebts = const [],
-    this.selectedPeriod = 'Jour',
-    required this.selectedDate,
-  });
-
-  CashState copyWith({
-    CashSummary? summary,
-    List<DebtInfo>? customerDebts,
-    List<DebtInfo>? supplierDebts,
-    String? selectedPeriod,
-    DateTime? selectedDate,
-  }) {
-    return CashState(
-      summary: summary ?? this.summary,
-      customerDebts: customerDebts ?? this.customerDebts,
-      supplierDebts: supplierDebts ?? this.supplierDebts,
-      selectedPeriod: selectedPeriod ?? this.selectedPeriod,
-      selectedDate: selectedDate ?? this.selectedDate,
-    );
-  }
-}
 
 class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
   final supabase = Supabase.instance.client;
@@ -47,152 +17,204 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
 
   Future<void> loadData() async {
     try {
-      final current = CashState(
-        summary: const CashSummary(
-          cashSales: 0,
-          creditSales: 0,
-          cashPurchases: 0,
-          creditPurchases: 0,
-          expenses: 0,
-          bankDeposits: 0,
-          withdrawals: 0,
-          ownerTransfers: 0,
-        ),
-        selectedDate: DateTime.now(),
-      );
-
-      final (start, end) = _getDateRange(
-        current.selectedPeriod,
-        current.selectedDate,
-      );
-
-      final purchases = await _loadPurchases(start, end);
-      final sales = await _loadSales(start, end);
-      final expenses = await _loadExpenses(start, end);
-      final cashTrans = await _loadCashTransactions(start, end);
+      final selectedDate = DateTime.now();
+      
+      final transactions = await _loadAllTransactionsUntil(selectedDate);
+      final summary = _calculateCumulativeSummary(transactions);
       final custDebts = await _loadCustomerDebts();
       final suppDebts = await _loadSupplierDebts();
 
-      final summary = CashSummary(
-        cashPurchases: purchases['cash']!,
-        creditPurchases: purchases['credit']!,
-        cashSales: sales['cash']!,
-        creditSales: sales['credit']!,
-        expenses: expenses,
-        bankDeposits: cashTrans['deposit']!,
-        withdrawals: cashTrans['withdrawal']!,
-        ownerTransfers: cashTrans['transfer']!,
-      );
-
-      state = AsyncValue.data(
-        current.copyWith(
-          summary: summary,
-          customerDebts: custDebts,
-          supplierDebts: suppDebts,
-        ),
-      );
+      state = AsyncValue.data(CashState(
+        summary: summary,
+        customerDebts: custDebts,
+        supplierDebts: suppDebts,
+        selectedDate: selectedDate,
+        transactions: transactions,
+      ));
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
   }
 
-  (DateTime, DateTime) _getDateRange(String period, DateTime date) {
-    switch (period) {
-      case 'Jour':
-        final start = DateTime(date.year, date.month, date.day);
-        return (start, start.add(const Duration(days: 1)));
-      case 'Semaine':
-        final start = date.subtract(Duration(days: date.weekday - 1));
-        return (start, start.add(const Duration(days: 7)));
-      case 'Mois':
-        final start = DateTime(date.year, date.month, 1);
-        return (start, DateTime(date.year, date.month + 1, 1));
-      case 'Année':
-        return (DateTime(date.year, 1, 1), DateTime(date.year + 1, 1, 1));
-      default:
-        final start = DateTime(date.year, date.month, date.day);
-        return (start, start.add(const Duration(days: 1)));
+  CashSummary _calculateCumulativeSummary(List<CashTransaction> transactions) {
+    double totalIn = 0;
+    double totalOut = 0;
+
+    for (final t in transactions) {
+      if (t.isInflow) {
+        totalIn += t.amount;
+      } else if (t.isOutflow) {
+        totalOut += t.amount;
+      }
     }
-  }
 
-  Future<Map<String, double>> _loadPurchases(
-    DateTime start,
-    DateTime end,
-  ) async {
-    final data = await supabase
-        .from('purchases')
-        .select('*, suppliers(name, phone)')
-        .gte('purchase_date', start.toIso8601String())
-        .lt('purchase_date', end.toIso8601String());
-
-    double cash = 0, credit = 0;
-    for (final p in data) {
-      final amount = (p['amount'] as num).toDouble();
-      if (p['paid'] == true)
-        cash += amount;
-      else
-        credit += amount;
-    }
-    return {'cash': cash, 'credit': credit};
-  }
-
-  Future<Map<String, double>> _loadSales(DateTime start, DateTime end) async {
-    final data = await supabase
-        .from('sales')
-        .select('*, clients(name, phone)')
-        .gte('sale_date', start.toIso8601String())
-        .lt('sale_date', end.toIso8601String());
-
-    double cash = 0, credit = 0;
-    for (final s in data) {
-      final amount = (s['amount'] as num).toDouble();
-      if (s['paid'] == true)
-        cash += amount;
-      else
-        credit += amount;
-    }
-    return {'cash': cash, 'credit': credit};
-  }
-
-  Future<double> _loadExpenses(DateTime start, DateTime end) async {
-    final data = await supabase
-        .from('expenses')
-        .select()
-        .gte('created_at', start.toIso8601String())
-        .lt('created_at', end.toIso8601String());
-
-    return data.fold<double>(
-      0,
-      (sum, e) => sum + ((e['amount'] as num?)?.toDouble() ?? 0),
+    return CashSummary(
+      totalIn: totalIn,
+      totalOut: totalOut,
+      netCashFlow: totalIn - totalOut,
     );
   }
 
-  Future<Map<String, double>> _loadCashTransactions(
-    DateTime start,
-    DateTime end,
-  ) async {
-    final data = await supabase
-        .from('cash_transactions')
-        .select()
-        .gte('transaction_date', start.toIso8601String())
-        .lt('transaction_date', end.toIso8601String());
+  Future<List<CashTransaction>> _loadAllTransactionsUntil(DateTime endDate) async {
+    final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+    final List<CashTransaction> transactions = [];
 
-    double deposit = 0, withdrawal = 0, transfer = 0;
-    for (final t in data) {
-      final amount = (t['amount'] as num).toDouble();
-      switch (t['type']) {
-        case 'bank_deposit':
-          deposit += amount;
-          break;
-        case 'withdrawal':
-          withdrawal += amount;
-          break;
-        case 'owner_transfer':
-          transfer += amount;
-          break;
-      }
+    // Ventes au comptant - AVEC fallback sur customer/invoice_number
+    final sales = await supabase
+        .from('sales')
+        .select('id, amount, sale_date, customer, invoice_number')
+        .eq('paid', true)
+        .lte('sale_date', end.toIso8601String())
+        .order('sale_date', ascending: true);
+    
+    for (final s in sales) {
+      final customer = s['customer'];
+      final invoiceNum = s['invoice_number'];
+      final desc = customer != null 
+          ? 'Vente à $customer' 
+          : (invoiceNum != null ? 'Vente #$invoiceNum' : 'Vente au comptant');
+      
+      transactions.add(CashTransaction(
+        id: 'sale_${s['id']}',
+        type: TransactionType.sale,
+        amount: (s['amount'] as num).toDouble(),
+        date: DateTime.parse(s['sale_date']),
+        description: desc,
+        createdAt: DateTime.parse(s['sale_date']),
+      ));
     }
-    return {'deposit': deposit, 'withdrawal': withdrawal, 'transfer': transfer};
+
+    // Achats au comptant - AVEC fallback sur supplier/invoice_number
+    final purchases = await supabase
+        .from('purchases')
+        .select('id, amount, purchase_date, supplier, invoice_number')
+        .eq('paid', true)
+        .lte('purchase_date', end.toIso8601String())
+        .order('purchase_date', ascending: true);
+    
+    for (final p in purchases) {
+      final supplier = p['supplier'];
+      final invoiceNum = p['invoice_number'];
+      final desc = supplier != null 
+          ? 'Achat chez $supplier' 
+          : (invoiceNum != null ? 'Achat #$invoiceNum' : 'Achat au comptant');
+      
+      transactions.add(CashTransaction(
+        id: 'purchase_${p['id']}',
+        type: TransactionType.purchase,
+        amount: (p['amount'] as num).toDouble(),
+        date: DateTime.parse(p['purchase_date']),
+        description: desc,
+        createdAt: DateTime.parse(p['purchase_date']),
+      ));
+    }
+
+    // Dépenses - AVEC name comme description principale
+    final expenses = await supabase
+        .from('expenses')
+        .select('id, amount, expenses_date, name, recipient, invoice_number')
+        .lte('expenses_date', end.toIso8601String())
+        .order('expenses_date', ascending: true);
+    
+    for (final e in expenses) {
+      final name = e['name'] ?? 'Dépense';
+      final recipient = e['recipient'];
+      final invoiceNum = e['invoice_number'];
+      
+      String desc = name;
+      if (recipient != null) desc += ' à $recipient';
+      if (invoiceNum != null) desc += ' (Facture: $invoiceNum)';
+      
+      transactions.add(CashTransaction(
+        id: 'expense_${e['id']}',
+        type: TransactionType.expense,
+        amount: (e['amount'] as num).toDouble(),
+        date: DateTime.parse(e['expenses_date']),
+        description: desc,
+        createdAt: DateTime.parse(e['expenses_date']),
+      ));
+    }
+
+    // Transactions caisse
+    final cashTrans = await supabase
+        .from('cash_transactions')
+        .select('id, type, amount, transaction_date, description')
+        .lte('transaction_date', end.toIso8601String())
+        .order('transaction_date', ascending: true);
+    
+    for (final t in cashTrans) {
+      final type = _parseTransactionType(t['type']);
+      final typeLabel = type.label;
+      final desc = t['description'] ?? typeLabel;
+      
+      transactions.add(CashTransaction(
+        id: 'cash_${t['id']}',
+        type: type,
+        amount: (t['amount'] as num).toDouble(),
+        date: DateTime.parse(t['transaction_date']),
+        description: desc,
+        createdAt: DateTime.parse(t['transaction_date']),
+      ));
+    }
+
+    return transactions;
+  }
+
+  TransactionType _parseTransactionType(String? type) {
+    switch (type) {
+      case 'contribution':
+      case 'apport':
+        return TransactionType.contribution;
+      case 'bank_deposit':
+      case 'versement':
+        return TransactionType.bankDeposit;
+      case 'withdrawal':
+      case 'retrait':
+        return TransactionType.withdrawal;
+      case 'owner_transfer':
+      case 'remis_gerant':
+        return TransactionType.ownerTransfer;
+      default:
+        return TransactionType.expense;
+    }
+  }
+
+  Future<void> setDate(DateTime date) async {
+    state = const AsyncValue.loading();
+    try {
+      final transactions = await _loadAllTransactionsUntil(date);
+      final summary = _calculateCumulativeSummary(transactions);
+      
+      final current = state.value;
+      state = AsyncValue.data(CashState(
+        summary: summary,
+        customerDebts: current?.customerDebts ?? [],
+        supplierDebts: current?.supplierDebts ?? [],
+        selectedDate: date,
+        transactions: transactions,
+      ));
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+    }
+  }
+
+  Future<void> addTransaction({
+    required TransactionType type,
+    required double amount,
+    String? description,
+    DateTime? date,
+  }) async {
+    final transactionDate = date ?? DateTime.now();
+    
+    await supabase.from('cash_transactions').insert({
+      'type': type.name,
+      'amount': amount,
+      'description': description,
+      'transaction_date': transactionDate.toIso8601String(),
+      'created_at': DateTime.now().toIso8601String(),
+    });
+
+    await loadData();
   }
 
   Future<List<DebtInfo>> _loadCustomerDebts() async {
@@ -211,14 +233,17 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
       final dueDate = saleDate.add(Duration(days: delayDays));
       final daysOverdue = now.difference(dueDate).inDays;
 
+      final customer = s['customer'] ?? clientData['name'] ?? 'Client inconnu';
+      
       return DebtInfo(
-        name: clientData['name'] ?? 'Client inconnu',
+        id: s['id'].toString(),
+        name: customer,
         amount: (s['amount'] as num).toDouble(),
         date: saleDate,
-        type: 'customer',
-        phone: clientData['phone'],
-        description: s['description'],
         dueDate: dueDate,
+        type: DebtType.customer,
+        phone: clientData['phone'] ?? s['customer'],
+        description: s['invoice_number'] != null ? 'Facture: ${s['invoice_number']}' : null,
         paymentDelayDays: daysOverdue > 0 ? daysOverdue : 0,
       );
     }).toList();
@@ -240,47 +265,19 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
       final dueDate = purchaseDate.add(Duration(days: delayDays));
       final daysOverdue = now.difference(dueDate).inDays;
 
+      final supplier = p['supplier'] ?? supplierData['name'] ?? 'Fournisseur inconnu';
+      
       return DebtInfo(
-        name: supplierData['name'] ?? 'Fournisseur inconnu',
+        id: p['id'].toString(),
+        name: supplier,
         amount: (p['amount'] as num).toDouble(),
         date: purchaseDate,
-        type: 'supplier',
-        phone: supplierData['phone'],
-        description: p['description'],
         dueDate: dueDate,
+        type: DebtType.supplier,
+        phone: supplierData['phone'] ?? p['supplier'],
+        description: p['invoice_number'] != null ? 'Facture: ${p['invoice_number']}' : null,
         paymentDelayDays: daysOverdue > 0 ? daysOverdue : 0,
       );
     }).toList();
-  }
-
-  Future<void> addTransaction({
-    required String type,
-    required double amount,
-    String? description,
-    DateTime? date,
-  }) async {
-    await supabase.from('cash_transactions').insert({
-      'type': type,
-      'amount': amount,
-      'description': description,
-      'transaction_date': (date ?? DateTime.now()).toIso8601String(),
-    });
-    await loadData();
-  }
-
-  void setPeriod(String period) {
-    final current = state.value;
-    if (current != null) {
-      state = AsyncValue.data(current.copyWith(selectedPeriod: period));
-      loadData();
-    }
-  }
-
-  void setDate(DateTime date) {
-    final current = state.value;
-    if (current != null) {
-      state = AsyncValue.data(current.copyWith(selectedDate: date));
-      loadData();
-    }
   }
 }

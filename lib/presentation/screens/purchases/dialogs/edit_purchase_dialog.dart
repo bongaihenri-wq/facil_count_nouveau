@@ -7,7 +7,7 @@ import '../../../../data/models/product_model.dart';
 import '../../../../data/models/purchase_model.dart';
 import '../../../providers/purchase_provider.dart';
 import '../../../providers/expense_provider.dart'; // Pour productsProvider
-import '../../../widgets/product_selector.dart';
+import '../../sales/widgets/product_selector.dart';
 import '../../../providers/product_provider.dart';
 
 void showEditPurchaseDialog(BuildContext context, PurchaseModel purchase) {

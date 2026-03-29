@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../data/models/product_model.dart';
 import '../../../../data/models/sale_model.dart';
 import '../../../providers/sale_provider.dart';
-import '../widgets/product_selector.dart';
+import '../../sales/widgets/product_selector.dart';
 import '../../../providers/product_provider.dart';
 
 void showEditSaleDialog(BuildContext context, SaleModel sale) {

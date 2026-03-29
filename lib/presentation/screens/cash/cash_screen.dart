@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../presentation/providers/cash_provider.dart';
+import '../../../../data/models/cash_models.dart';  // ← AJOUTÉ pour TransactionType
 import 'widgets/cash_balance_card.dart';
 import 'widgets/cash_flow_list.dart';
 import 'widgets/debt_summary_card.dart';
 import 'widgets/notification_badge.dart';
-import 'widgets/period_selector.dart';
 import 'dialogs/add_transaction_dialog.dart';
 import '../notifications_screen.dart';
 
@@ -16,7 +16,7 @@ class CashScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cashState = ref.watch(cashProvider);
 
-    // Calculer nombre d'alertes
+    // Calcul nombre d'alertes
     final alertCount = cashState.when(
       data: (s) =>
           s.customerDebts.where((d) => (d.paymentDelayDays ?? 0) > 0).length +
@@ -58,78 +58,25 @@ class CashScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Sélecteur période
-                PeriodSelector(
-                  selectedPeriod: state.selectedPeriod,
-                  selectedDate: state.selectedDate,
-                  onPeriodChanged: (p) =>
-                      ref.read(cashProvider.notifier).setPeriod(p),
-                  onDateChanged: (d) =>
-                      ref.read(cashProvider.notifier).setDate(d),
-                ),
-                const SizedBox(height: 20),
-                // Solde principal
+                // Solde principal avec date intégrée
                 CashBalanceCard(
                   netFlow: state.summary.netCashFlow,
                   totalIn: state.summary.totalIn,
                   totalOut: state.summary.totalOut,
+                  selectedDate: state.selectedDate,
+                  onDateTap: () => _showDatePicker(context, ref, state.selectedDate),
                 ),
                 const SizedBox(height: 20),
+                
                 // Créances et dettes
                 DebtSummaryCard(
                   customerDebts: state.customerDebts,
                   supplierDebts: state.supplierDebts,
                 ),
                 const SizedBox(height: 20),
-                // Détail entrées/sorties
-                CashFlowList(
-                  inItems: [
-                    CashFlowItem(
-                      label: 'Ventes au comptant',
-                      amount: state.summary.cashSales,
-                      icon: Icons.point_of_sale,
-                      color: Colors.green,
-                    ),
-                    CashFlowItem(
-                      label: 'Créances encaissées',
-                      amount: 0,
-                      icon: Icons.money,
-                      color: Colors.teal,
-                    ),
-                  ],
-                  outItems: [
-                    CashFlowItem(
-                      label: 'Achats au comptant',
-                      amount: state.summary.cashPurchases,
-                      icon: Icons.shopping_cart,
-                      color: Colors.orange,
-                      isNegative: true,
-                    ),
-                    CashFlowItem(
-                      label: 'Dépenses diverses',
-                      amount: state.summary.expenses,
-                      icon: Icons.receipt_long,
-                      color: Colors.red,
-                      isNegative: true,
-                    ),
-                    CashFlowItem(
-                      label: 'Versements banque',
-                      amount: state.summary.bankDeposits,
-                      icon: Icons.account_balance,
-                      color: Colors.blue,
-                      isNegative: true,
-                    ),
-                    CashFlowItem(
-                      label: 'Retraits / Transferts',
-                      amount:
-                          state.summary.withdrawals +
-                          state.summary.ownerTransfers,
-                      icon: Icons.payments,
-                      color: Colors.purple,
-                      isNegative: true,
-                    ),
-                  ],
-                ),
+                
+                // Détail des flux
+                _buildCashFlowDetail(state),
                 const SizedBox(height: 80),
               ],
             ),
@@ -158,6 +105,96 @@ class CashScreen extends ConsumerWidget {
         label: const Text('Transaction'),
         backgroundColor: Colors.blue.shade700,
       ),
+    );
+  }
+
+  Future<void> _showDatePicker(BuildContext context, WidgetRef ref, DateTime currentDate) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: currentDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      helpText: 'Voir le solde au',
+      cancelText: 'Annuler',
+      confirmText: 'Valider',
+      locale: const Locale('fr'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.blue.shade700,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black87,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      await ref.read(cashProvider.notifier).setDate(picked);
+    }
+  }
+
+  Widget _buildCashFlowDetail(CashState state) {
+    // Grouper les transactions par type pour l'affichage
+    final inflows = state.transactions.where((t) => t.isInflow).toList();
+    final outflows = state.transactions.where((t) => t.isOutflow).toList();
+
+    // Calculer les totaux par catégorie pour un affichage plus détaillé
+    final Map<TransactionType, double> inflowByType = {};
+    final Map<TransactionType, double> outflowByType = {};
+
+    for (final t in inflows) {
+      inflowByType[t.type] = (inflowByType[t.type] ?? 0) + t.amount;
+    }
+
+    for (final t in outflows) {
+      outflowByType[t.type] = (outflowByType[t.type] ?? 0) + t.amount;
+    }
+
+    // Créer les items d'affichage
+    final inItems = inflowByType.entries.map((e) => CashFlowItem(
+      label: e.key.label,
+      amount: e.value,
+      icon: e.key.icon,
+      color: e.key.color,
+    )).toList();
+
+    final outItems = outflowByType.entries.map((e) => CashFlowItem(
+      label: e.key.label,
+      amount: e.value,
+      icon: e.key.icon,
+      color: e.key.color,
+      isNegative: true,
+    )).toList();
+
+    // Si pas de transactions, afficher un message
+    if (inItems.isEmpty && outItems.isEmpty) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+              const SizedBox(height: 12),
+              Text(
+                'Aucune transaction jusqu\'au ${state.selectedDate.day}/${state.selectedDate.month}/${state.selectedDate.year}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return CashFlowList(
+      inItems: inItems,
+      outItems: outItems,
     );
   }
 }
