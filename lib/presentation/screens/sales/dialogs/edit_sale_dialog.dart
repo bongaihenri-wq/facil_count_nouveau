@@ -328,44 +328,91 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
     }
   }
 
-  Future<void> _submit() async {
-    if (_selectedProduct == null) {
-      _showError('Veuillez sélectionner un produit');
-      return;
-    }
+  // Dans _submit() de edit_sale_dialog.dart
 
-    final quantity = int.tryParse(_quantityCtrl.text.trim()) ?? 0;
-    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
-
-    if (quantity <= 0 || amount <= 0) {
-      _showError('Quantité et montant doivent être > 0');
-      return;
-    }
-
-    try {
-      await ref
-          .read(saleNotifierProvider.notifier)
-          .updateSale(
-            id: widget.sale.id,
-            productId: _selectedProduct!.id,
-            quantity: quantity,
-            amount: amount,
-            customer: _customerCtrl.text.trim().isEmpty
-                ? null
-                : _customerCtrl.text.trim(),
-            saleDate: _saleDate,
-            paid: _paid,
-            locked: _locked,
-          );
-
-      ref.invalidate(salesProvider);
-      ref.invalidate(productsProvider);
-
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      _showError('Erreur: $e');
-    }
+Future<void> _submit() async {
+  if (_selectedProduct == null) {
+    _showError('Veuillez sélectionner un produit');
+    return;
   }
+
+  final quantity = int.tryParse(_quantityCtrl.text.trim()) ?? 0;
+  final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+
+  if (quantity <= 0 || amount <= 0) {
+    _showError('Quantité et montant doivent être > 0');
+    return;
+  }
+
+  // 🔥 VÉRIFICATION STOCK (si changement de quantité)
+  final oldQuantity = widget.sale.quantity;
+  final quantityDiff = quantity - oldQuantity;
+  
+  if (quantityDiff > 0 && quantityDiff > _selectedProduct!.currentStock) {
+    _showError(
+      'Stock insuffisant pour augmenter la quantité.\n'
+      'Stock disponible: ${_selectedProduct!.currentStock}\n'
+      'Augmentation demandée: +$quantityDiff'
+    );
+    return;
+  }
+
+  try {
+    print('🔥 Mise à jour vente: ${widget.sale.id}');
+    print('  Produit: ${_selectedProduct!.id}');
+    print('  Quantité: $quantity (avant: $oldQuantity)');
+    print('  Montant: $amount'); print('🔥 TENTATIVE MISE À JOUR');
+    print('  ID vente: ${widget.sale.id}');
+    print('  ID produit: ${_selectedProduct!.id}');
+    print('  Quantité: $quantity');
+    print('  Montant: $amount');
+    print('  Date: $_saleDate');
+    print('  Payé: $_paid');
+    print('  Verrouillé: $_locked');
+    
+    await ref.read(saleNotifierProvider.notifier).updateSale(
+      id: widget.sale.id,
+      productId: _selectedProduct!.id,
+      quantity: quantity,
+      amount: amount,
+      customer: _customerCtrl.text.trim().isEmpty
+          ? null
+          : _customerCtrl.text.trim(),
+      saleDate: _saleDate,
+      paid: _paid,
+      locked: _locked,
+    );
+
+     print('✅ updateSale terminé sans erreur');
+
+    // 🔥 VÉRIFICATION IMMÉDIATE
+    final sales = await ref.read(salesProvider.future);
+    final updatedSale = sales.firstWhere(
+      (s) => s.id == widget.sale.id,
+      orElse: () => throw Exception('Vente non trouvée après maj'),
+    );
+    print('🔍 VÉRIFICATION:');
+    print('  Quantité en base: ${updatedSale.quantity}');
+    print('  Montant en base: ${updatedSale.amount}');
+
+    ref.invalidate(salesProvider);
+    ref.invalidate(productsProvider);
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Vente modifiée avec succès'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e, stack) {
+    print('❌ ERREUR: $e');
+    print(stack);
+    _showError('Erreur: $e');
+  }
+}
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
