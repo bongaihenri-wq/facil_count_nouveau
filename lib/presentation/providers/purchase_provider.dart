@@ -1,11 +1,10 @@
+// lib/presentation/providers/purchase_provider.dart
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/purchase_model.dart';
-import '../../data/models/product_model.dart';
 import '../../data/repositories/purchase_repository.dart';
-import '../../data/repositories/product_repository.dart';
-import 'expense_provider.dart'; // Pour supabaseClientProvider
-import 'product_provider.dart'; // Pour productsProvider
+import 'expense_provider.dart';
 
 final purchaseRepositoryProvider = Provider(
   (ref) => PurchaseRepository(ref.watch(supabaseClientProvider)),
@@ -97,30 +96,35 @@ class PurchaseFilters {
   final DateTime? startDate;
   final DateTime? endDate;
   final String? supplier;
+  final String? period;
 
   const PurchaseFilters({
     this.productId,
     this.startDate,
     this.endDate,
     this.supplier,
+    this.period,
   });
 
   bool get isActive =>
       productId != null ||
       startDate != null ||
       endDate != null ||
-      supplier != null;
+      supplier != null ||
+      period != null;
 
   PurchaseFilters copyWith({
     String? productId,
     DateTime? startDate,
     DateTime? endDate,
     String? supplier,
+    String? period,
   }) => PurchaseFilters(
     productId: productId ?? this.productId,
     startDate: startDate ?? this.startDate,
     endDate: endDate ?? this.endDate,
     supplier: supplier ?? this.supplier,
+    period: period ?? this.period,
   );
 }
 
@@ -149,35 +153,34 @@ final purchaseFiltersProvider =
       return PurchaseFiltersNotifier();
     });
 
-final filteredPurchasesProvider = Provider<AsyncValue<List<PurchaseModel>>>((
-  ref,
-) {
-  final purchasesAsync = ref.watch(purchasesProvider);
+// ⭐ CORRIGÉ : Retourne List<PurchaseModel> directement (identique à SaleScreen)
+final filteredPurchasesProvider = Provider<List<PurchaseModel>>((ref) {
+  final allPurchases = ref.watch(purchasesProvider).valueOrNull ?? [];
   final filters = ref.watch(purchaseFiltersProvider);
 
-  return purchasesAsync.when(
-    data: (purchases) {
-      final filtered = purchases.where((p) {
-        if (filters.productId != null && p.productId != filters.productId)
-          return false;
-        if (filters.startDate != null &&
-            p.purchaseDate.isBefore(filters.startDate!))
-          return false;
-        if (filters.endDate != null && p.purchaseDate.isAfter(filters.endDate!))
-          return false;
-        if (filters.supplier != null &&
-            !(p.supplier?.toLowerCase().contains(
-                  filters.supplier!.toLowerCase(),
-                ) ??
-                false))
-          return false;
-        return true;
-      }).toList();
-      return AsyncValue.data(filtered);
-    },
-    loading: () => const AsyncValue.loading(),
-    error: (err, stack) => AsyncValue.error(err, stack),
-  );
+  print('Filtres actifs: ${filters.isActive}');
+
+  return allPurchases.where((purchase) {
+    if (filters.productId != null && purchase.productId != filters.productId) {
+      return false;
+    }
+    if (filters.startDate != null &&
+        purchase.purchaseDate.isBefore(filters.startDate!)) {
+      return false;
+    }
+    if (filters.endDate != null &&
+        purchase.purchaseDate.isAfter(filters.endDate!)) {
+      return false;
+    }
+    if (filters.supplier != null &&
+        !(purchase.supplier?.toLowerCase().contains(
+              filters.supplier!.toLowerCase(),
+            ) ??
+            false)) {
+      return false;
+    }
+    return true;
+  }).toList();
 });
 
 // Tab state

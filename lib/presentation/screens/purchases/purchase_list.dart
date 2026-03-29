@@ -1,32 +1,34 @@
+// lib/presentation/screens/purchases/purchase_list.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../data/models/purchase_model.dart';
+import '../../../../data/models/purchase_model.dart';
 import '../../providers/purchase_provider.dart';
-import 'dialogs/edit_purchase_dialog.dart';
+import '../../providers/product_provider.dart';
 import 'purchase_card.dart';
+import '../purchases/dialogs/edit_purchase_dialog.dart';
 import 'package:facil_count_nouveau/core/utils/formatters.dart';
 
 final selectedPeriodProvider = StateProvider<String>((ref) => 'Mois');
 
-class PurchaseList extends ConsumerWidget {
+class PurchaseList extends StatelessWidget {
   final List<PurchaseModel> purchases;
 
   const PurchaseList({super.key, required this.purchases});
 
-  List<PurchaseModel> _filterByPeriod(
-    List<PurchaseModel> purchases,
-    String period,
-  ) {
+  List<PurchaseModel> _filterByPeriod(List<PurchaseModel> purchases, String period) {
     final now = DateTime.now();
-    return purchases.where((p) {
+
+    return purchases.where((purchase) {
       switch (period) {
         case 'Semaine':
-          return p.purchaseDate.isAfter(now.subtract(const Duration(days: 7)));
+          final weekAgo = now.subtract(const Duration(days: 7));
+          return purchase.purchaseDate.isAfter(weekAgo);
         case 'Mois':
-          return p.purchaseDate.month == now.month &&
-              p.purchaseDate.year == now.year;
+          return purchase.purchaseDate.month == now.month &&
+              purchase.purchaseDate.year == now.year;
         case 'Année':
-          return p.purchaseDate.year == now.year;
+          return purchase.purchaseDate.year == now.year;
         default:
           return true;
       }
@@ -34,99 +36,117 @@ class PurchaseList extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedPeriod = ref.watch(selectedPeriodProvider);
-    final filtered = _filterByPeriod(purchases, selectedPeriod);
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final selectedPeriod = ref.watch(selectedPeriodProvider);
+        final filteredPurchases = _filterByPeriod(purchases, selectedPeriod);
 
-    if (filtered.isEmpty) {
-      return const Center(child: Text('Aucun achat trouvé'));
-    }
+        if (filteredPurchases.isEmpty) {
+          return _buildEmptyState(context, ref);
+        }
 
-    final total = filtered.fold<double>(0, (sum, p) => sum + p.amount);
+        final total = filteredPurchases.fold<double>(0, (sum, p) => sum + p.amount);
 
-    return Column(
-      children: [
-        _buildTotalCard(total),
-        _buildPeriodFilterChips(ref, selectedPeriod),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(8),
-            itemCount: filtered.length,
-            itemBuilder: (context, index) => PurchaseCard(
-              purchase: filtered[index],
-              onEdit: () => _showEditDialog(context, ref, filtered[index]),
-              onDelete: () => _confirmDelete(context, ref, filtered[index]),
+        return Column(
+          children: [
+            _buildTotalCard(total),
+            _buildPeriodFilterChips(ref, selectedPeriod),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                itemCount: filteredPurchases.length,
+                itemBuilder: (context, index) => PurchaseCard(
+                  purchase: filteredPurchases[index],
+                  onEdit: () => _showEditDialog(context, ref, filteredPurchases[index]),
+                  onDelete: () => _confirmDelete(context, ref, filteredPurchases[index]),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.filter_alt_off, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          const Text(
+            'Aucun achat pour cette période',
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              ref.read(selectedPeriodProvider.notifier).state = 'Tout';
+            },
+            icon: const Icon(Icons.clear),
+            label: const Text('Voir tous les achats'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade700, // 🔥 BLEU
+              foregroundColor: Colors.white,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildTotalCard(double total) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.blue.shade50,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              const Text(
-                'Total achats',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+    return Card(
+      margin: const EdgeInsets.all(12),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Total période',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              Formatters.formatCurrency(total),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade700, // 🔥 BLEU
               ),
-              const SizedBox(height: 12),
-              Text(
-                Formatters.formatCurrency(total), // ← SÉPARATEUR DE MILLIERS
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade800,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildPeriodFilterChips(WidgetRef ref, String selectedPeriod) {
+    final periods = ['Semaine', 'Mois', 'Année', 'Tout'];
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: ['Semaine', 'Mois', 'Année'].map((period) {
-            final isSelected = period == selectedPeriod;
-            return Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: FilterChip(
-                label: Text(period),
-                selected: isSelected,
-                onSelected: (_) =>
-                    ref.read(selectedPeriodProvider.notifier).state = period,
-                selectedColor: Colors.blue.shade700,
-                backgroundColor: Colors.grey.shade200,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black87,
-                ),
-              ),
-            );
-          }).toList(),
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Wrap(
+        spacing: 8,
+        children: periods.map((period) {
+          final isSelected = selectedPeriod == period;
+          return ChoiceChip(
+            label: Text(period),
+            selected: isSelected,
+            selectedColor: Colors.blue.shade100, // 🔥 BLEU
+            onSelected: (_) {
+              ref.read(selectedPeriodProvider.notifier).state = period;
+            },
+          );
+        }).toList(),
       ),
     );
   }
 
-  void _showEditDialog(
-    BuildContext context,
-    WidgetRef ref,
-    PurchaseModel purchase,
-  ) {
+  void _showEditDialog(BuildContext context, WidgetRef ref, PurchaseModel purchase) {
     if (purchase.locked) {
       showDialog(
         context: context,
@@ -154,30 +174,26 @@ class PurchaseList extends ConsumerWidget {
     }
   }
 
-  void _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    PurchaseModel purchase,
-  ) {
+  void _confirmDelete(BuildContext context, WidgetRef ref, PurchaseModel purchase) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Supprimer ?'),
-        content: Text('${purchase.productName} - ${purchase.formattedAmount}'),
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: const Text('Voulez-vous vraiment supprimer cet achat ?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Annuler'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
-              await ref
-                  .read(purchaseNotifierProvider.notifier)
-                  .deletePurchase(purchase.id);
+              await ref.read(purchaseNotifierProvider.notifier).deletePurchase(purchase.id);
               ref.invalidate(purchasesProvider);
-              if (context.mounted) Navigator.pop(ctx);
+              ref.invalidate(productsProvider);
+              Navigator.pop(context);
             },
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

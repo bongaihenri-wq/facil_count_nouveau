@@ -1,14 +1,13 @@
-import 'package:facil_count_nouveau/presentation/providers/sale_provider.dart';
+// lib/presentation/screens/purchases/dialogs/add_purchase_dialog.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/product_model.dart';
 import '../../../providers/purchase_provider.dart';
-import '../../../providers/expense_provider.dart'; // Pour productsProvider
 import '../../../providers/product_provider.dart';
 import '../../sales/widgets/product_selector.dart';
-
 
 void showAddPurchaseDialog(BuildContext context) {
   showDialog(context: context, builder: (ctx) => const _AddPurchaseDialog());
@@ -28,54 +27,180 @@ class _AddPurchaseDialogState extends ConsumerState<_AddPurchaseDialog> {
   ProductModel? _selectedProduct;
   DateTime _purchaseDate = DateTime.now();
   bool _paid = true;
+  String? _quantityError;
+
+  @override
+  void dispose() {
+    _quantityCtrl.dispose();
+    _amountCtrl.dispose();
+    _supplierCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
-    final state = ref.watch(purchaseNotifierProvider);
 
     return AlertDialog(
-      title: const Text('Nouvel achat'),
+      title: const Row(
+        children: [
+          Icon(Icons.shopping_cart, color: Colors.blue), // 🔥 BLEU
+          SizedBox(width: 8),
+          Text('Nouvel achat'),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sélecteur produit
             productsAsync.when(
-              data: (products) => ProductSelector(
-                products: products,
-                selectedProduct: _selectedProduct,
-                onChanged: (p) => setState(() => _selectedProduct = p),
+              data: (products) {
+                if (products.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.red),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Aucun produit disponible. Ajoutez d\'abord des produits.',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return ProductSelector(
+                  products: products,
+                  selectedProduct: _selectedProduct,
+                  allowOutOfStock: true,
+                  onChanged: (ProductModel? p) {
+                    setState(() {
+                      _selectedProduct = p;
+                      _quantityError = null;
+                    });
+                  },
+                );
+              },
+              loading: () => const Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 8),
+                    Text('Chargement des produits...'),
+                  ],
+                ),
               ),
-              loading: () => const CircularProgressIndicator(),
-              error: (_, __) => const Text('Erreur chargement produits'),
+              error: (err, stack) => Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Erreur de chargement',
+                      style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '$err',
+                      style: TextStyle(color: Colors.red[600], fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
             ),
 
             const SizedBox(height: 16),
 
-            // Quantité
+            if (_selectedProduct != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _selectedProduct!.stockColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _selectedProduct!.stockColor.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      color: _selectedProduct!.stockColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Stock actuel: ${_selectedProduct!.currentStock} unités',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _selectedProduct!.stockColor,
+                            ),
+                          ),
+                          Text(
+                            'Après achat: ${_selectedProduct!.currentStock + (int.tryParse(_quantityCtrl.text) ?? 0)} unités',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
             TextField(
               controller: _quantityCtrl,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Quantité *',
-                border: OutlineInputBorder(),
+                hintText: 'Nombre d\'unités à acheter',
+                border: const OutlineInputBorder(),
+                errorText: _quantityError,
+                prefixIcon: const Icon(Icons.format_list_numbered),
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (value) {
+                if (value.isNotEmpty) {
+                  final qty = int.tryParse(value) ?? 0;
+                  if (qty <= 0) {
+                    setState(() => _quantityError = 'Quantité doit être > 0');
+                  } else {
+                    setState(() => _quantityError = null);
+                  }
+                }
+              },
             ),
 
             const SizedBox(height: 16),
 
-            // Montant
             TextField(
               controller: _amountCtrl,
               decoration: const InputDecoration(
                 labelText: 'Montant total (CFA) *',
+                hintText: 'Prix total de l\'achat',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.attach_money),
               ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
               ],
@@ -83,49 +208,67 @@ class _AddPurchaseDialogState extends ConsumerState<_AddPurchaseDialog> {
 
             const SizedBox(height: 16),
 
-            // Fournisseur
             TextField(
               controller: _supplierCtrl,
               decoration: const InputDecoration(
                 labelText: 'Fournisseur (optionnel)',
+                hintText: 'Nom du fournisseur',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.business),
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // Date
             OutlinedButton.icon(
               onPressed: _pickDate,
               icon: const Icon(Icons.calendar_today),
-              label: Text(DateFormat('dd/MM/yyyy').format(_purchaseDate)),
+              label: Text(
+                'Date: ${DateFormat('dd/MM/yyyy').format(_purchaseDate)}',
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+              ),
             ),
 
             const SizedBox(height: 8),
 
-            // Payé
             SwitchListTile(
-              title: const Text('Payé'),
+              title: const Text('Payé (comptant)'),
+              subtitle: Text(
+                _paid ? 'Paiement immédiat' : 'Paiement différé',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _paid ? Colors.green : Colors.orange,
+                ),
+              ),
               value: _paid,
               onChanged: (v) => setState(() => _paid = v),
+              secondary: Icon(
+                _paid ? Icons.payments : Icons.pending,
+                color: _paid ? Colors.green : Colors.orange,
+              ),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(
+        TextButton.icon(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler'),
+          icon: const Icon(Icons.cancel_outlined),
+          label: const Text('Annuler'),
         ),
-        ElevatedButton(
-          onPressed: state.isLoading ? null : _submit,
-          child: state.isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Enregistrer'),
+        ElevatedButton.icon(
+          onPressed: _quantityError != null || _selectedProduct == null
+              ? null
+              : _submit,
+          icon: const Icon(Icons.save),
+          label: const Text('Enregistrer'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue, // 🔥 BLEU
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey[300],
+          ),
         ),
       ],
     );
@@ -137,6 +280,16 @@ class _AddPurchaseDialogState extends ConsumerState<_AddPurchaseDialog> {
       initialDate: _purchaseDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.blue.shade700, // 🔥 BLEU
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) setState(() => _purchaseDate = picked);
   }
@@ -150,33 +303,52 @@ class _AddPurchaseDialogState extends ConsumerState<_AddPurchaseDialog> {
     final quantity = int.tryParse(_quantityCtrl.text.trim()) ?? 0;
     final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
 
-    if (quantity <= 0 || amount <= 0) {
-      _showError('Quantité et montant doivent être > 0');
+    if (quantity <= 0) {
+      _showError('La quantité doit être supérieure à 0');
       return;
     }
 
-    await ref
-        .read(purchaseNotifierProvider.notifier)
-        .createPurchase(
-          productId: _selectedProduct!.id,
-          quantity: quantity,
-          amount: amount,
-          supplier: _supplierCtrl.text.trim().isEmpty
-              ? null
-              : _supplierCtrl.text.trim(),
-          purchaseDate: _purchaseDate,
-          paid: _paid,
+    if (amount <= 0) {
+      _showError('Le montant doit être supérieur à 0');
+      return;
+    }
+
+    try {
+      await ref.read(purchaseNotifierProvider.notifier).createPurchase(
+        productId: _selectedProduct!.id,
+        quantity: quantity,
+        amount: amount,
+        supplier: _supplierCtrl.text.trim().isEmpty
+            ? null
+            : _supplierCtrl.text.trim(),
+        purchaseDate: _purchaseDate,
+        paid: _paid,
+      );
+
+      ref.invalidate(purchasesProvider);
+      ref.invalidate(productsProvider);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Achat enregistré: $quantity x ${_selectedProduct!.name}'),
+            backgroundColor: Colors.blue, // 🔥 BLEU
+          ),
         );
-
-    ref.invalidate(purchasesProvider);
-    ref.invalidate(productsProvider);
-
-    if (mounted) Navigator.pop(context);
+      }
+    } catch (e) {
+      _showError('Erreur lors de l\'enregistrement: $e');
+    }
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 }
