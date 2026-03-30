@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "TEMPORAIRE",
+    "project_id": "facilcount-temp",
+    "storage_bucket": "facilcount-temp.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123456789:android:temporaire",
+        "android_client_info": {
+          "package_name": "com.example.facil_count_nouveau"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "TEMPORAIRE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
