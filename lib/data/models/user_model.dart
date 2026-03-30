@@ -1,51 +1,46 @@
-class User {
+class UserModel {
   final String id;
   final String phoneNumber;
   final String password;
   final String businessId;
   final String role;
-  final String? firstName;
-  final String? lastName;
+  final String firstName;
+  final String lastName;
   final String? email;
   final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
-  User({
+  UserModel({
     required this.id,
     required this.phoneNumber,
     required this.password,
     required this.businessId,
     required this.role,
-    this.firstName,
-    this.lastName,
+    required this.firstName,
+    required this.lastName,
     this.email,
-    this.isActive = true,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
-  factory User.fromMap(Map<String, dynamic> map) {
-    return User(
-      id: map['id'] as String,
-      phoneNumber: map['phone_number'] as String,
-      password: map['password'] as String,
-      businessId: map['business_id'] as String,
-      role: map['role'] as String,
-      firstName: map['first_name'] as String?,
-      lastName: map['last_name'] as String?,
-      email: map['email'] as String?,
-      isActive: map['is_active'] as bool? ?? true,
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    return UserModel(
+      id: json['id'],
+      phoneNumber: json['phone_number'],
+      password: json['password'],
+      businessId: json['business_id'],
+      role: json['role'],
+      firstName: json['first_name'] ?? '',
+      lastName: json['last_name'] ?? '',
+      email: json['email'],
+      isActive: json['is_active'] ?? true,
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: DateTime.parse(json['updated_at']),
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'phone_number': phoneNumber,
-      'password': password,
-      'business_id': businessId,
-      'role': role,
-      'first_name': firstName,
-      'last_name': lastName,
-      'email': email,
-      'is_active': isActive,
-    };
-  }
+  String get fullName => '$firstName $lastName';
+  bool get isAdmin => role == 'admin';
 }

@@ -1,0 +1,63 @@
+import 'package:flutter/material.dart';
+
+class LockedItemBadge extends StatelessWidget {
+  final bool isLocked;
+  final String? lockedBy;
+  final VoidCallback? onUnlock;
+  final bool canUnlock;
+
+  const LockedItemBadge({
+    super.key,
+    required this.isLocked,
+    this.lockedBy,
+    this.onUnlock,
+    this.canUnlock = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isLocked) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock, size: 14, color: Colors.red.shade700),
+          const SizedBox(width: 4),
+          Text(
+            'Verrouillé',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.red.shade700,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (canUnlock) ...[
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: onUnlock,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Icon(
+                  Icons.lock_open,
+                  size: 12,
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
