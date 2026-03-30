@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'screens/home_screen_old.dart';
 import 'presentation/screens/home/home_screen.dart';
 import 'screens/invoices_screen.dart';
-import 'screens/login_screen.dart';
+import 'presentation/screens/auth/login_screen.dart';
 import 'screens/stock_screen.dart';
 
 // Presentation screens
@@ -88,7 +88,7 @@ class FacilCountApp extends StatelessWidget {
         '/cash': (context) => const CashScreen(),
         '/login': (context) => const LoginScreen(),
       },
-      initialRoute: '/',
+      initialRoute: '/login',
     );
   }
 }

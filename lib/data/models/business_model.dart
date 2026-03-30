@@ -1,8 +1,3 @@
-// ❌ SUPPRIMEZ CES LIGNES :
-// import 'package:json_annotation/json_annotation.dart';
-// part 'business_model.g.dart';
-// @JsonSerializable()
-
 class BusinessModel {
   final String id;
   final String name;
@@ -24,33 +19,16 @@ class BusinessModel {
     required this.updatedAt,
   });
 
-  // ✅ FROMJSON MANUEL
   factory BusinessModel.fromJson(Map<String, dynamic> json) {
     return BusinessModel(
-      id: json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      type: json['type']?.toString() ?? '',
-      address: json['address']?.toString(),
-      city: json['city']?.toString(),
-      country: json['country']?.toString(),
-      createdAt:
-          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
-          DateTime.now(),
-      updatedAt:
-          DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
-          DateTime.now(),
+      id: json['id'],
+      name: json['name'],
+      type: json['type'],
+      address: json['address'],
+      city: json['city'],
+      country: json['country'],
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: DateTime.parse(json['updated_at']),
     );
   }
-
-  // ✅ TOJSON MANUEL
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'type': type,
-    'address': address,
-    'city': city,
-    'country': country,
-    'created_at': createdAt.toIso8601String(),
-    'updated_at': updatedAt.toIso8601String(),
-  };
 }
