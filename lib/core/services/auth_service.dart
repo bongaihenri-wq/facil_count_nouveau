@@ -223,4 +223,11 @@ class AuthService {
   Future<String?> getUserRole() async {
     return await SecureStorageService.getRole();
   }
+ Future<String?> getCurrentUserId() async {
+  return await SecureStorageService.getUserId();
+}
+Future<String?> getCurrentBusinessId() async {
+  return await SecureStorageService.getBusinessId();
+}
+
 }

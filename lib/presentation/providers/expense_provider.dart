@@ -2,15 +2,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/expense_model.dart';
 import '../../data/repositories/expense_repository.dart';
+import '../../core/utils/business_helper.dart';
 
-// Provider Supabase client
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
   return Supabase.instance.client;
 });
 
-final expenseRepositoryProvider = Provider(
-  (ref) => ExpenseRepository(ref.watch(supabaseClientProvider)),
-);
+final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
+  final client = Supabase.instance.client;
+  final businessHelper = ref.watch(businessHelperProvider);
+  return ExpenseRepository(client, businessHelper);
+});
 
 // Filtres
 final expenseFiltersProvider = StateProvider<ExpenseFilters>(

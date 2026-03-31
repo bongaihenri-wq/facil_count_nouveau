@@ -174,29 +174,29 @@ class PurchaseList extends StatelessWidget {
     }
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, PurchaseModel purchase) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: const Text('Voulez-vous vraiment supprimer cet achat ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await ref.read(purchaseNotifierProvider.notifier).deletePurchase(purchase.id);
-              ref.invalidate(purchasesProvider);
-              ref.invalidate(productsProvider);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
+ void _confirmDelete(BuildContext context, WidgetRef ref, PurchaseModel purchase) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Confirmer la suppression'),
+      content: const Text('Voulez-vous vraiment supprimer cet achat ?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            await ref.read(purchaseNotifierProvider.notifier).deletePurchase(purchase);  // ← CORRIGÉ
+            ref.invalidate(purchasesProvider);
+            ref.invalidate(productsProvider);
+            Navigator.pop(context);
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+}
 }

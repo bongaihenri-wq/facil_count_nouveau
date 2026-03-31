@@ -1,21 +1,20 @@
-// lib/data/repositories/sale_repository.dart
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../data/models/sale_model.dart';
+import '../models/sale_model.dart';
+import '../../core/utils/business_helper.dart';
 
 class SaleRepository {
   final SupabaseClient _client;
+  final BusinessHelper _businessHelper;
 
-  SaleRepository(this._client);
+  SaleRepository(this._client, this._businessHelper);
 
-  /// Récupère toutes les ventes avec les infos produits
   Future<List<SaleModel>> getSales() async {
+    final businessId = await _businessHelper.getBusinessId();
     final data = await _client
         .from('sales')
-        .select('''
-          *,
-          products(name)
-        ''')
+        .select('*, products(name), clients(name), business_id')
+        .eq('business_id', businessId)
         .order('sale_date', ascending: false);
 
     return (data as List<dynamic>)
@@ -23,71 +22,103 @@ class SaleRepository {
         .toList();
   }
 
-  /// Crée une nouvelle vente
-  Future<void> createSale({
+  Future<SaleModel> createSale({
     required String productId,
     required int quantity,
     required double amount,
-    String? customer,
+    String? clientId,
     required DateTime saleDate,
+    bool paid = true,
   }) async {
-    await _client.from('sales').insert({
-      'product_id': productId,
-      'quantity': quantity,
-      'amount': amount,
-      'customer': customer,
-      'sale_date': saleDate.toIso8601String(),
-      'paid': true,
-      'locked': false,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    final businessId = await _businessHelper.getBusinessId();
+
+    final data = await _client
+        .from('sales')
+        .insert({
+          'product_id': productId,
+          'quantity': quantity,
+          'amount': amount,
+          'client_id': clientId,
+          'sale_date': saleDate.toIso8601String(),
+          'paid': paid,
+          'business_id': businessId,
+        })
+        .select('*, products(name), clients(name)')
+        .single();
+
+    // Diminuer le stock (vente)
+    await _updateProductStock(productId, -quantity, businessId);
+
+    return SaleModel.fromJson(data as Map<String, dynamic>);
   }
 
-  /// ✅ MET À JOUR une vente existante
-  Future<void> updateSale({
+  Future<SaleModel> updateSale({
     required String id,
     required String productId,
     required int quantity,
     required double amount,
-    String? customer,
+    String? clientId,
     required DateTime saleDate,
     required bool paid,
     required bool locked,
-  }) async { 
-    print('🔥 SaleRepository.updateSale appelé avec ID: $id');
-    try {
-      final result = await _client.from('sales').update({
-        'product_id': productId,
-        'quantity': quantity,
-        'amount': amount,
-        'customer': customer,
-        'sale_date': saleDate.toIso8601String(),
-        'paid': paid,
-        'locked': locked,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', id);
-     print('✅ Résultat update: $result');
-    } catch (e) {
-      print('❌ Erreur Supabase: $e');
-      rethrow;
+  }) async {
+    final businessId = await _businessHelper.getBusinessId();
+
+    final oldSale = await _client
+        .from('sales')
+        .select('quantity')
+        .eq('id', id)
+        .single();
+
+    final oldQuantity = (oldSale['quantity'] as num).toInt();
+    final quantityDiff = quantity - oldQuantity;
+
+    final data = await _client
+        .from('sales')
+        .update({
+          'product_id': productId,
+          'quantity': quantity,
+          'amount': amount,
+          'client_id': clientId,
+          'sale_date': saleDate.toIso8601String(),
+          'paid': paid,
+          'locked': locked,
+        })
+        .eq('id', id)
+        .select('*, products(name), clients(name)')
+        .single();
+
+    if (quantityDiff != 0) {
+      await _updateProductStock(productId, -quantityDiff, businessId);
     }
-    await _client.from('sales').update({
-      'product_id': productId,
-      'quantity': quantity,
-      'amount': amount,
-      'customer': customer,
-      'sale_date': saleDate.toIso8601String(),
-      'paid': paid,
-      'locked': locked,
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', id);
+
+    return SaleModel.fromJson(data as Map<String, dynamic>);
   }
 
-  /// Supprime une vente et met à jour le stock
   Future<void> deleteSale(String id, String productId, int quantity) async {
-    // Supprime la vente
+    final businessId = await _businessHelper.getBusinessId();
+
     await _client.from('sales').delete().eq('id', id);
-    
-    // Le stock sera recalculé automatiquement lors du prochain getProducts()
+
+    // Réaugmenter le stock (suppression de vente)
+    await _updateProductStock(productId, quantity, businessId);
+  }
+
+  Future<void> _updateProductStock(String productId, int quantityDelta, String businessId) async {
+    final product = await _client
+        .from('products')
+        .select('initial_stock')
+        .eq('id', productId)
+        .eq('business_id', businessId)
+        .single();
+
+    final currentStock = (product['initial_stock'] as num).toInt();
+    final newStock = currentStock + quantityDelta;
+
+    await _client
+        .from('products')
+        .update({'initial_stock': newStock})
+        .eq('id', productId)
+        .eq('business_id', businessId);
   }
 }

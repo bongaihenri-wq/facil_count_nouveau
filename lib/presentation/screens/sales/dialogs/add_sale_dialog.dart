@@ -402,9 +402,7 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
         productId: _selectedProduct!.id,
         quantity: quantity,
         amount: amount,
-        customer: _customerCtrl.text.trim().isEmpty
-            ? null
-            : _customerCtrl.text.trim(),
+        clientId: _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
         saleDate: _saleDate,
       );
 

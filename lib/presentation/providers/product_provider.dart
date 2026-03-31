@@ -4,11 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/product_model.dart';
 import '../../data/repositories/product_repository.dart';
-import 'expense_provider.dart';
+import '../../core/utils/business_helper.dart';
 
-final productRepositoryProvider = Provider(
-  (ref) => ProductRepository(ref.watch(supabaseClientProvider)),
-);
+final productRepositoryProvider = Provider<ProductRepository>((ref) {
+  final client = Supabase.instance.client;
+  final businessHelper = ref.watch(businessHelperProvider);
+  return ProductRepository(client, businessHelper);
+});
+
+// ... reste du fichier inchangé
 
 final productsProvider = FutureProvider<List<ProductModel>>((ref) async {
   final repo = ref.watch(productRepositoryProvider);

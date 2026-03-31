@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/business_helper.dart';
 
 // ==================== MODELS ====================
 
@@ -73,13 +74,14 @@ class ProductSale {
 
 final dashboardProvider =
     StateNotifierProvider<DashboardNotifier, AsyncValue<DashboardStats>>((ref) {
-      return DashboardNotifier();
+      return DashboardNotifier(ref);
     });
 
 class DashboardNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
   final SupabaseClient supabase = Supabase.instance.client;
+  final Ref _ref;
 
-  DashboardNotifier() : super(const AsyncValue.loading()) {
+  DashboardNotifier(this._ref) : super(const AsyncValue.loading()) {
     loadData('Mois');
   }
 
@@ -115,12 +117,14 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
     DateTime end,
     String period,
   ) async {
-    final achats = await _getTotal('purchases', 'purchase_date', start, end);
-    final ventes = await _getTotal('sales', 'sale_date', start, end);
-    final depenses = await _getTotal('expenses', 'expenses_date', start, end);
+    final businessId = await _ref.read(businessHelperProvider).getBusinessId(); // ← AJOUTÉ
+    
+    final achats = await _getTotal('purchases', 'purchase_date', start, end, businessId); // ← AJOUTÉ businessId
+    final ventes = await _getTotal('sales', 'sale_date', start, end, businessId); // ← AJOUTÉ businessId
+    final depenses = await _getTotal('expenses', 'expenses_date', start, end, businessId); // ← AJOUTÉ businessId
 
-    final monthly = await _getMonthlyEvolution();
-    final products = await _getProductStats(start, end);
+    final monthly = await _getMonthlyEvolution(businessId); // ← AJOUTÉ businessId
+    final products = await _getProductStats(start, end, businessId); // ← AJOUTÉ businessId
 
     return DashboardStats(
       totalAchats: achats,
@@ -139,8 +143,11 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
     String dateCol,
     DateTime? start,
     DateTime? end,
+    String businessId, // ← AJOUTÉ
   ) async {
-    var query = supabase.from(table).select('amount');
+    var query = supabase.from(table).select('amount')
+        .eq('business_id', businessId); // ← AJOUTÉ
+    
     if (start != null) query = query.gte(dateCol, start.toIso8601String());
     if (end != null) query = query.lte(dateCol, end.toIso8601String());
 
@@ -150,7 +157,7 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
     });
   }
 
-  Future<List<MonthlyData>> _getMonthlyEvolution() async {
+  Future<List<MonthlyData>> _getMonthlyEvolution(String businessId) async { // ← AJOUTÉ businessId
     final now = DateTime.now();
     final List<MonthlyData> data = [];
 
@@ -163,18 +170,21 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
         'purchase_date',
         monthStart,
         monthEnd,
+        businessId, // ← AJOUTÉ
       );
       final ventes = await _getTotal(
         'sales',
         'sale_date',
         monthStart,
         monthEnd,
+        businessId, // ← AJOUTÉ
       );
       final depenses = await _getTotal(
         'expenses',
         'expenses_date',
         monthStart,
         monthEnd,
+        businessId, // ← AJOUTÉ
       );
 
       data.add(
@@ -192,10 +202,12 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
   Future<Map<String, List<ProductSale>>> _getProductStats(
     DateTime? start,
     DateTime? end,
+    String businessId, // ← AJOUTÉ
   ) async {
     var query = supabase
         .from('sales')
-        .select('product_id, quantity, amount, products!inner(name)');
+        .select('product_id, quantity, amount, products!inner(name)')
+        .eq('business_id', businessId); // ← AJOUTÉ
 
     if (start != null) query = query.gte('sale_date', start.toIso8601String());
     if (end != null) query = query.lte('sale_date', end.toIso8601String());

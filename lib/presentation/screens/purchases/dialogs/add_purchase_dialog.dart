@@ -322,7 +322,6 @@ class _AddPurchaseDialogState extends ConsumerState<_AddPurchaseDialog> {
             ? null
             : _supplierCtrl.text.trim(),
         purchaseDate: _purchaseDate,
-        paid: _paid,
       );
 
       ref.invalidate(purchasesProvider);

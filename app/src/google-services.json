@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "969054091774",
+    "project_id": "facilcount",
+    "storage_bucket": "facilcount.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:969054091774:android:58bba2eafc38a34c5f68af",
+        "android_client_info": {
+          "package_name": "com.example.facil_count_nouveau"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1cwd61rDcMpWc2ccdon30Vm13G_NC9BU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

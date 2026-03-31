@@ -375,9 +375,7 @@ Future<void> _submit() async {
       productId: _selectedProduct!.id,
       quantity: quantity,
       amount: amount,
-      customer: _customerCtrl.text.trim().isEmpty
-          ? null
-          : _customerCtrl.text.trim(),
+      clientId: _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
       saleDate: _saleDate,
       paid: _paid,
       locked: _locked,

@@ -1,20 +1,24 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense_model.dart';
+import '../../core/utils/business_helper.dart';
 
 class ExpenseRepository {
   final SupabaseClient _client;
+  final BusinessHelper _businessHelper;
 
-  ExpenseRepository(this._client);
+  ExpenseRepository(this._client, this._businessHelper);
 
   Future<List<ExpenseModel>> getExpenses({
     DateTime? startDate,
     DateTime? endDate,
     String? searchQuery,
   }) async {
-    // Commencer avec from() puis select()
-    var query = _client.from('expenses').select();
+    final businessId = await _businessHelper.getBusinessId();  // ← AJOUTÉ
+    
+    var query = _client.from('expenses').select()
+        .eq('business_id', businessId);  // ← AJOUTÉ ICI
 
-    // Appliquer les filtres avec eq, gte, lte (retournent PostgrestFilterBuilder)
     if (startDate != null) {
       query = query.gte('expenses_date', startDate.toIso8601String());
     }
@@ -22,23 +26,18 @@ class ExpenseRepository {
       query = query.lte('expenses_date', endDate.toIso8601String());
     }
 
-    // Puis order (retourne PostgrestTransformBuilder)
     final data = await query.order('expenses_date', ascending: false);
 
-    // Conversion en modèles
     var expenses = (data as List<dynamic>)
         .map((json) => ExpenseModel.fromJson(json as Map<String, dynamic>))
         .toList();
 
-    // Filtrage texte en mémoire
     if (searchQuery != null && searchQuery.isNotEmpty) {
       final q = searchQuery.toLowerCase();
       expenses = expenses
-          .where(
-            (e) =>
-                e.name.toLowerCase().contains(q) ||
-                (e.recipient?.toLowerCase().contains(q) ?? false),
-          )
+          .where((e) =>
+              e.name.toLowerCase().contains(q) ||
+              (e.recipient?.toLowerCase().contains(q) ?? false))
           .toList();
     }
 
@@ -53,6 +52,8 @@ class ExpenseRepository {
     required DateTime expensesDate,
     bool locked = false,
   }) async {
+    final businessId = await _businessHelper.getBusinessId();
+
     final data = await _client
         .from('expenses')
         .insert({
@@ -62,6 +63,7 @@ class ExpenseRepository {
           'invoice_number': invoiceNumber,
           'expenses_date': expensesDate.toIso8601String(),
           'locked': locked,
+          'business_id': businessId,
         })
         .select()
         .single();

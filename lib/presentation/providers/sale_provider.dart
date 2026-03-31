@@ -2,13 +2,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/sale_model.dart';
 import '../../data/repositories/sale_repository.dart';
-import 'expense_provider.dart';
-import 'product_provider.dart';
+import '../../core/utils/business_helper.dart';
 
-final saleRepositoryProvider = Provider(
-  (ref) => SaleRepository(ref.watch(supabaseClientProvider)),
-);
 
+final saleRepositoryProvider = Provider<SaleRepository>((ref) {
+  final client = Supabase.instance.client;
+  final businessHelper = ref.watch(businessHelperProvider);
+  return SaleRepository(client, businessHelper);
+});
+
+// ... reste du fichier inchangé
 // Sales list - AsyncValue
 final salesProvider = FutureProvider<List<SaleModel>>((ref) async {
   final repo = ref.watch(saleRepositoryProvider);
@@ -25,7 +28,7 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
     required String productId,
     required int quantity,
     required double amount,
-    String? customer,
+    String? clientId,
     required DateTime saleDate,
   }) async {
     state = const AsyncValue.loading();
@@ -34,7 +37,7 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
         productId: productId,
         quantity: quantity,
         amount: amount,
-        customer: customer,
+        clientId: clientId,
         saleDate: saleDate,
       );
       state = const AsyncValue.data(null);
@@ -48,7 +51,7 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
     required String productId,
     required int quantity,
     required double amount,
-    String? customer,
+    String? clientId,
     required DateTime saleDate,
     required bool paid,
     required bool locked,
@@ -60,7 +63,7 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
         productId: productId,
         quantity: quantity,
         amount: amount,
-        customer: customer,
+        clientId: clientId,
         saleDate: saleDate,
         paid: paid,
         locked: locked,

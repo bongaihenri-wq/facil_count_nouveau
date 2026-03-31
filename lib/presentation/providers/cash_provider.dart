@@ -1,17 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/cash_models.dart';
+import '../../core/utils/business_helper.dart';
 
-final cashProvider = StateNotifierProvider<CashNotifier, AsyncValue<CashState>>(
-  (ref) => CashNotifier(),
-);
-
-
+final cashProvider = StateNotifierProvider<CashNotifier, AsyncValue<CashState>>((ref) {
+  return CashNotifier(ref);
+});
 
 class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
-  final supabase = Supabase.instance.client;
+  final SupabaseClient supabase;
+  final Ref _ref;
 
-  CashNotifier() : super(const AsyncValue.loading()) {
+  CashNotifier(this._ref) : supabase = Supabase.instance.client, super(const AsyncValue.loading()) {
     loadData();
   }
 
@@ -56,13 +56,16 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
   }
 
   Future<List<CashTransaction>> _loadAllTransactionsUntil(DateTime endDate) async {
+    final businessId = await _ref.read(businessHelperProvider).getBusinessId(); // ← AJOUTÉ
+    
     final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
     final List<CashTransaction> transactions = [];
 
-    // Ventes au comptant - AVEC fallback sur customer/invoice_number
+    // Ventes au comptant - AVEC business_id
     final sales = await supabase
         .from('sales')
         .select('id, amount, sale_date, customer, invoice_number')
+        .eq('business_id', businessId) // ← AJOUTÉ
         .eq('paid', true)
         .lte('sale_date', end.toIso8601String())
         .order('sale_date', ascending: true);
@@ -84,10 +87,11 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
       ));
     }
 
-    // Achats au comptant - AVEC fallback sur supplier/invoice_number
+    // Achats au comptant - AVEC business_id
     final purchases = await supabase
         .from('purchases')
         .select('id, amount, purchase_date, supplier, invoice_number')
+        .eq('business_id', businessId) // ← AJOUTÉ
         .eq('paid', true)
         .lte('purchase_date', end.toIso8601String())
         .order('purchase_date', ascending: true);
@@ -109,10 +113,11 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
       ));
     }
 
-    // Dépenses - AVEC name comme description principale
+    // Dépenses - AVEC business_id
     final expenses = await supabase
         .from('expenses')
         .select('id, amount, expenses_date, name, recipient, invoice_number')
+        .eq('business_id', businessId) // ← AJOUTÉ
         .lte('expenses_date', end.toIso8601String())
         .order('expenses_date', ascending: true);
     
@@ -135,10 +140,11 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
       ));
     }
 
-    // Transactions caisse
+    // Transactions caisse - AVEC business_id
     final cashTrans = await supabase
         .from('cash_transactions')
         .select('id, type, amount, transaction_date, description')
+        .eq('business_id', businessId) // ← AJOUTÉ
         .lte('transaction_date', end.toIso8601String())
         .order('transaction_date', ascending: true);
     
@@ -204,6 +210,7 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
     String? description,
     DateTime? date,
   }) async {
+    final businessId = await _ref.read(businessHelperProvider).getBusinessId(); // ← AJOUTÉ
     final transactionDate = date ?? DateTime.now();
     
     await supabase.from('cash_transactions').insert({
@@ -212,15 +219,19 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
       'description': description,
       'transaction_date': transactionDate.toIso8601String(),
       'created_at': DateTime.now().toIso8601String(),
+      'business_id': businessId, // ← AJOUTÉ
     });
 
     await loadData();
   }
 
   Future<List<DebtInfo>> _loadCustomerDebts() async {
+    final businessId = await _ref.read(businessHelperProvider).getBusinessId(); // ← AJOUTÉ
+    
     final data = await supabase
         .from('sales')
         .select('*, clients(name, phone, payment_delay_days)')
+        .eq('business_id', businessId) // ← AJOUTÉ
         .eq('paid', false)
         .order('sale_date', ascending: false);
 
@@ -250,9 +261,12 @@ class CashNotifier extends StateNotifier<AsyncValue<CashState>> {
   }
 
   Future<List<DebtInfo>> _loadSupplierDebts() async {
+    final businessId = await _ref.read(businessHelperProvider).getBusinessId(); // ← AJOUTÉ
+    
     final data = await supabase
         .from('purchases')
         .select('*, suppliers(name, phone, payment_delay_days)')
+        .eq('business_id', businessId) // ← AJOUTÉ
         .eq('paid', false)
         .order('purchase_date', ascending: false);
 

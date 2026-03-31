@@ -1,14 +1,17 @@
 // lib/presentation/providers/purchase_provider.dart
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/purchase_model.dart';
 import '../../data/repositories/purchase_repository.dart';
-import 'expense_provider.dart';
+import '../../core/utils/business_helper.dart';
 
-final purchaseRepositoryProvider = Provider(
-  (ref) => PurchaseRepository(ref.watch(supabaseClientProvider)),
-);
+
+final purchaseRepositoryProvider = Provider<PurchaseRepository>((ref) {
+  final client = Supabase.instance.client;
+  final businessHelper = ref.watch(businessHelperProvider);
+  return PurchaseRepository(client, businessHelper);
+});
+
 
 // Purchases list
 final purchasesProvider = FutureProvider<List<PurchaseModel>>((ref) async {
@@ -28,7 +31,7 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
     required double amount,
     String? supplier,
     required DateTime purchaseDate,
-    bool paid = true,
+    bool paid = true,  // ← AJOUTÉ
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -38,7 +41,7 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
         amount: amount,
         supplier: supplier,
         purchaseDate: purchaseDate,
-        paid: paid,
+        paid: paid,  // ← AJOUTÉ
       );
       state = const AsyncValue.data(null);
     } catch (e, st) {
@@ -74,10 +77,14 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<void> deletePurchase(String id) async {
+  Future<void> deletePurchase(PurchaseModel purchase) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.deletePurchase(id);
+      await _repo.deletePurchase(
+        purchase.id,
+        purchase.productId,
+        purchase.quantity,
+      );
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
