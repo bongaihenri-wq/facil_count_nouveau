@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Screens
 import 'presentation/screens/home/home_screen.dart';
-import 'screens/invoices_screen.dart';
+import 'presentation/screens/invoices/invoices_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'screens/stock_screen.dart';
 
