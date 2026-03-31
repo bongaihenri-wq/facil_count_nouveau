@@ -51,6 +51,10 @@ dependencies:
  
   flutter_riverpod: ^2.4.9
 
+  photo_view: ^0.14.0      # Pour le zoom image
+  image_picker: ^1.0.7      # Pour prendre des photos
+  path_provider: ^2.1.2     # Pour les chemins de fichiers 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

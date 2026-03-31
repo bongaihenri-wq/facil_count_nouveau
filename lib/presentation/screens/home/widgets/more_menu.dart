@@ -5,7 +5,7 @@ import '../../products/product_screen.dart';
 import '../../stock/stock_screen.dart';
 import '../../dashboard/dashboard_screen.dart';
 import '../../cash/cash_screen.dart';
-import '/../../screens/invoices_screen.dart';
+import '/presentation/screens/invoices/invoices_screen.dart';
 import '../../expenses/expense_screen.dart';
 
 
