@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -6,7 +7,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Screens
-// import 'screens/home_screen_old.dart';
 import 'presentation/screens/home/home_screen.dart';
 import 'screens/invoices_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
@@ -19,6 +19,10 @@ import 'presentation/screens/purchases/purchase_screen.dart';
 import 'presentation/screens/products/product_screen.dart';
 import 'presentation/screens/dashboard/dashboard_screen.dart';
 import 'presentation/screens/cash/cash_screen.dart';
+// Routes pour User Profil
+import 'presentation/screens/profile/profile_screen.dart';
+import 'presentation/screens/profile/user_management_screen.dart';
+import 'presentation/screens/home/admin_dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,6 +80,54 @@ class FacilCountApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
+      // ✅ PopScope pour confirmation avant quitter
+      builder: (context, child) {
+        return PopScope(
+          canPop: false,
+          onPopInvoked: (didPop) async {
+            if (didPop) return;
+            
+            final shouldExit = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                title: Row(
+                  children: [
+                    Icon(Icons.exit_to_app, color: Colors.red.shade400),
+                    const SizedBox(width: 8),
+                    const Text('Quitter ?'),
+                  ],
+                ),
+                content: const Text(
+                  'Voulez-vous vraiment quitter FacilCount ?',
+                  style: TextStyle(fontSize: 16),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Non'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Oui'),
+                  ),
+                ],
+              ),
+            );
+            
+            if (shouldExit == true) {
+              SystemNavigator.pop();
+            }
+          },
+          child: child!,
+        );
+      },
       routes: {
         '/': (context) => const HomeScreen(),
         '/dashboard': (context) => const DashboardScreen(),
@@ -87,6 +139,10 @@ class FacilCountApp extends StatelessWidget {
         '/stock': (context) => const StockScreen(),
         '/cash': (context) => const CashScreen(),
         '/login': (context) => const LoginScreen(),
+        // ✅ Routes User Profil
+        '/profile': (context) => const ProfileScreen(),
+        '/user-management': (context) => const UserManagementScreen(),
+        '/admin-dashboard': (context) => const AdminDashboardScreen(),
       },
       initialRoute: '/login',
     );

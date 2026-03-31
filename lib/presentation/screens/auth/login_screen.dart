@@ -36,14 +36,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (success && mounted) {
       final isAdmin = ref.read(authProvider).isAdmin;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => isAdmin 
-            ? const AdminDashboardScreen() 
-            : const UserDashboardScreen(),
-        ),
-      );
+      Navigator.pushReplacementNamed(context, '/');
     }
   }
 
