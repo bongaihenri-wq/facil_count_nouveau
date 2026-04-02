@@ -35,7 +35,7 @@ class AuthService {
       // Store session
       await SecureStorageService.setUserId(user.id);
       await SecureStorageService.setRole(user.role);
-      await SecureStorageService.setBusinessId(user.businessId);
+      // await SecureStorageService.setBusinessId(user.businessId);  // Supprimé
       await SecureStorageService.setToken('session_${user.id}_${DateTime.now().millisecondsSinceEpoch}');
 
       return user;
@@ -93,7 +93,7 @@ class AuthService {
       // 3. Store session
       await SecureStorageService.setUserId(user.id);
       await SecureStorageService.setRole(user.role);
-      await SecureStorageService.setBusinessId(user.businessId);
+      // await SecureStorageService.setBusinessId(user.businessId);  // Supprimé
       await SecureStorageService.setToken('session_${user.id}_${DateTime.now().millisecondsSinceEpoch}');
 
       return user;
@@ -101,8 +101,6 @@ class AuthService {
       throw Exception("Erreur d'inscription: $e");
     }
   }
-
-  // ========== MÉTHODES MANQUANTES ==========
 
   // Get current user from storage
   Future<UserModel?> getCurrentUser() async {
@@ -118,16 +116,20 @@ class AuthService {
 
       return UserModel.fromJson(response);
     } catch (e) {
-      // Session invalide, on clear
       await logout();
       return null;
     }
   }
 
+  // Nouvelle méthode pour récupérer le business_id
+  Future<String?> getCurrentBusinessId() async {
+    final user = await getCurrentUser();
+    return user?.businessId;
+  }
+
   // Update user
   Future<UserModel> updateUser(String userId, Map<String, dynamic> data) async {
     try {
-      // Hash password if present
       if (data.containsKey('password') && data['password'] != null) {
         data['password'] = _hashPassword(data['password']);
       }
@@ -145,7 +147,7 @@ class AuthService {
     }
   }
 
-  // Create additional user (admin only)
+  // Create additional user
   Future<UserModel> createUser({
     required String phoneNumber,
     required String password,
@@ -179,7 +181,7 @@ class AuthService {
     }
   }
 
-  // Get users by business (admin only)
+  // Get users by business
   Future<List<UserModel>> getBusinessUsers(String businessId) async {
     try {
       final response = await _supabase
@@ -223,11 +225,8 @@ class AuthService {
   Future<String?> getUserRole() async {
     return await SecureStorageService.getRole();
   }
- Future<String?> getCurrentUserId() async {
-  return await SecureStorageService.getUserId();
-}
-Future<String?> getCurrentBusinessId() async {
-  return await SecureStorageService.getBusinessId();
-}
 
+  Future<String?> getCurrentUserId() async {
+    return await SecureStorageService.getUserId();
+  }
 }

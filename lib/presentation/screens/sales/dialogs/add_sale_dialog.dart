@@ -407,6 +407,7 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
       );
 
       ref.invalidate(salesProvider);
+      ref.invalidate(filteredSalesProvider);
       ref.invalidate(productsProvider);
 
       if (mounted) {

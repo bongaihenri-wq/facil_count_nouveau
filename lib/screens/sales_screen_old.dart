@@ -1,26 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:facil_count_nouveau/core/constants/app_colors.dart';
 import 'package:facil_count_nouveau/core/utils/format.dart';
 import 'package:facil_count_nouveau/core/widgets/compact_card.dart';
-import 'package:facil_count_nouveau/core/services/supabase_service.dart';
+import 'package:facil_count_nouveau/presentation/providers/sale_provider.dart';
+import 'package:facil_count_nouveau/core/utils/business_helper.dart';
+import 'package:facil_count_nouveau/data/models/sale_model.dart';
 
-class SalesScreen extends StatefulWidget {
+class SalesScreen extends ConsumerStatefulWidget {
   const SalesScreen({super.key});
 
   @override
-  State<SalesScreen> createState() => _SalesScreenState();
+  ConsumerState<SalesScreen> createState() => _SalesScreenState();
 }
 
-class _SalesScreenState extends State<SalesScreen> {
-  // 1. Variables d'état
-  final _api = SupabaseService();
+class _SalesScreenState extends ConsumerState<SalesScreen> {
   final _supabase = Supabase.instance.client;
-  bool _isLoading = true;
-  List<Map<String, dynamic>> _sales = [];
-  List<Map<String, dynamic>> _products = [];
   String _selectedPeriod = 'Mois';
   String _selectedTab = 'Liste';
   String _productFilter = '';
@@ -30,65 +28,31 @@ class _SalesScreenState extends State<SalesScreen> {
   double _totalMoisActuel = 0;
   double _totalMoisPrecedent = 0;
   double _difference = 0;
+  List<Map<String, dynamic>> _products = [];
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-  }
-
-  // 2. Méthodes de chargement
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      await Future.wait([
-        _loadSales(),
-        _loadProducts(),
-        _calculateMonthlyTotals(),
-      ]);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur chargement: ${e.toString()}')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _loadSales() async {
-    try {
-      final data = await _api.getSales();
-      if (mounted) setState(() => _sales = data);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur chargement ventes: ${e.toString()}')),
-        );
-      }
-    }
+    _calculateMonthlyTotals();
+    _loadProducts();
   }
 
   Future<void> _loadProducts() async {
     try {
       final data = await _supabase
           .from('products')
-          .select('id, name, stock, low_stock_threshold')
+          .select('id, name, stock, low_stock_threshold, current_stock:product_current_stock(current_stock)')
           .order('name');
       if (mounted) setState(() => _products = data);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur chargement produits: ${e.toString()}'),
-          ),
+          SnackBar(content: Text('Erreur chargement produits: ${e.toString()}')),
         );
       }
     }
   }
 
-  // 3. Méthodes de calcul
   Future<void> _calculateMonthlyTotals() async {
     final now = DateTime.now();
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
@@ -109,6 +73,7 @@ class _SalesScreenState extends State<SalesScreen> {
       lastDayOfPreviousMonth,
     );
     _difference = _totalMoisActuel - _totalMoisPrecedent;
+    if (mounted) setState(() {});
   }
 
   Future<double> _getTotal(
@@ -133,7 +98,6 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // 4. Méthode de mise à jour du stock
   Future<void> _updateProductStock(String productId, int quantityChange) async {
     try {
       final stockRes = await _supabase
@@ -159,7 +123,6 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // 5. Méthodes d'UI réutilisables
   Widget _buildProductDropdown({
     required List<Map<String, dynamic>> products,
     required Map<String, dynamic>? selectedProduct,
@@ -305,29 +268,6 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _buildSalesList() {
-    final displayedList = _filteredSales;
-    if (displayedList.isEmpty) {
-      return const Center(child: Text('Aucune vente trouvée'));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      itemCount: displayedList.length,
-      itemBuilder: (context, index) {
-        final s = displayedList[index];
-        return CompactSaleCard(
-          productName: s['products']?['name'] ?? 'Inconnu',
-          amount: (s['amount'] as num? ?? 0).toDouble(),
-          quantity: s['quantity'] as int? ?? 0,
-          date: s['sale_date']?.substring(0, 10) ?? '',
-          isLocked: s['locked'] == true,
-          onEdit: () => _showEditSaleDialog(s),
-          onDelete: () => _deleteSale(s),
-        );
-      },
-    );
-  }
-
   Widget _buildCompactAnnualDashboard() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -390,9 +330,8 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 6. Filtrage des ventes
-  List<Map<String, dynamic>> get _filteredSales {
-    var list = List<Map<String, dynamic>>.from(_sales);
+  List<SaleModel> _filterSales(List<SaleModel> sales) {
+    var list = List<SaleModel>.from(sales);
     final now = DateTime.now();
     DateTime periodStart;
     DateTime periodEnd = now.add(const Duration(days: 1));
@@ -408,54 +347,34 @@ class _SalesScreenState extends State<SalesScreen> {
         periodStart = DateTime(now.year, 1, 1);
     }
 
-    list = list.where((s) {
-      final dateStr = s['sale_date'] as String?;
-      if (dateStr == null) return false;
-      final date = DateTime.tryParse(dateStr);
-      return date != null &&
-          date.isAfter(periodStart.subtract(const Duration(days: 1))) &&
-          date.isBefore(periodEnd);
+    list = list.where((sale) {
+      return sale.saleDate.isAfter(periodStart.subtract(const Duration(days: 1))) &&
+             sale.saleDate.isBefore(periodEnd);
     }).toList();
 
     if (_productFilter.isNotEmpty) {
       final q = _productFilter.toLowerCase();
-      list = list
-          .where(
-            (s) =>
-                (s['products']?['name'] as String?)?.toLowerCase().contains(
-                  q,
-                ) ??
-                false,
-          )
-          .toList();
+      list = list.where((sale) => 
+        sale.productName?.toLowerCase().contains(q) ?? false
+      ).toList();
     }
 
     if (_startDate != null || _endDate != null) {
-      list = list.where((s) {
-        final date = DateTime.tryParse(s['sale_date'] ?? '');
-        if (date == null) return false;
-        if (_startDate != null && date.isBefore(_startDate!)) return false;
-        if (_endDate != null && date.isAfter(_endDate!)) return false;
+      list = list.where((sale) {
+        if (_startDate != null && sale.saleDate.isBefore(_startDate!)) return false;
+        if (_endDate != null && sale.saleDate.isAfter(_endDate!)) return false;
         return true;
       }).toList();
     }
 
     if (_exactQuantity != null) {
-      list = list
-          .where((s) => (s['quantity'] as int?) == _exactQuantity)
-          .toList();
+      list = list.where((sale) => sale.quantity == _exactQuantity).toList();
     }
 
-    list.sort((a, b) {
-      final da = DateTime.tryParse(a['sale_date'] ?? '') ?? DateTime(2000);
-      final db = DateTime.tryParse(b['sale_date'] ?? '') ?? DateTime(2000);
-      return db.compareTo(da);
-    });
-
+    list.sort((a, b) => b.saleDate.compareTo(a.saleDate));
     return list;
   }
 
-  // 7. Dialogue d'ajout de vente
   Future<void> _showAddSaleForm() async {
     final quantityCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
@@ -463,56 +382,41 @@ class _SalesScreenState extends State<SalesScreen> {
     Map<String, dynamic>? selectedProduct;
     DateTime saleDate = DateTime.now();
     bool paid = true;
-    bool isLoading = true;
-    List<Map<String, dynamic>> products = [];
+
+    // ✅ RÉCUPÈRE LE BUSINESS ID DYNAMIQUEMENT
+    final businessHelper = ref.read(businessHelperProvider);
+    String businessId;
+    try {
+      businessId = await businessHelper.getBusinessId();
+      print('🔍 Business ID récupéré: $businessId');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: utilisateur non connecté - $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            Future<void> loadProducts() async {
-              setState(() => isLoading = true);
-              try {
-                final data = await _supabase
-                    .from('products')
-                    .select('''
-                      id,
-                      name,
-                      stock,
-                      current_stock:product_current_stock(current_stock)
-                    ''')
-                    .order('name');
-                setState(() {
-                  products = data;
-                  isLoading = false;
-                });
-              } catch (e) {
-                setState(() => isLoading = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Erreur chargement produits: $e')),
-                );
-              }
-            }
-
-            WidgetsBinding.instance.addPostFrameCallback((_) => loadProducts());
-
             return AlertDialog(
               title: const Text('Ajouter une vente'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (isLoading)
-                      const Center(child: CircularProgressIndicator())
-                    else
-                      _buildProductDropdown(
-                        products: products,
-                        selectedProduct: selectedProduct,
-                        onChanged: (value) =>
-                            setState(() => selectedProduct = value),
-                      ),
-
+                    _buildProductDropdown(
+                      products: _products,
+                      selectedProduct: selectedProduct,
+                      onChanged: (value) => setState(() => selectedProduct = value),
+                    ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: quantityCtrl,
@@ -523,16 +427,12 @@ class _SalesScreenState extends State<SalesScreen> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
-
                     const SizedBox(height: 16),
                     _buildDatePickerButton(
                       context: context,
-                      label:
-                          'Date: ${DateFormat('dd/MM/yyyy').format(saleDate)}',
-                      onDateSelected: (picked) =>
-                          setState(() => saleDate = picked),
+                      label: 'Date: ${DateFormat('dd/MM/yyyy').format(saleDate)}',
+                      onDateSelected: (picked) => setState(() => saleDate = picked),
                     ),
-
                     const SizedBox(height: 16),
                     TextField(
                       controller: amountCtrl,
@@ -541,16 +441,11 @@ class _SalesScreenState extends State<SalesScreen> {
                         border: OutlineInputBorder(),
                         hintText: 'Exemple : 375000 ou 375.50',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d*\.?\d{0,2}'),
-                        ),
+                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
                       ],
                     ),
-
                     const SizedBox(height: 16),
                     TextField(
                       controller: customerCtrl,
@@ -559,7 +454,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         border: OutlineInputBorder(),
                       ),
                     ),
-
                     const SizedBox(height: 16),
                     SwitchListTile(
                       title: const Text('Payé (cash)'),
@@ -586,20 +480,15 @@ class _SalesScreenState extends State<SalesScreen> {
                       return;
                     }
 
-                    final quantity =
-                        int.tryParse(quantityCtrl.text.trim()) ?? 0;
-                    final totalAmount =
-                        double.tryParse(
+                    final quantity = int.tryParse(quantityCtrl.text.trim()) ?? 0;
+                    final totalAmount = double.tryParse(
                           amountCtrl.text.trim().replaceAll(',', '.'),
-                        ) ??
-                        0.0;
+                        ) ?? 0.0;
 
                     if (quantity <= 0 || totalAmount <= 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text(
-                            'Quantité et montant doivent être valides',
-                          ),
+                          content: Text('Quantité et montant doivent être valides'),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -607,23 +496,20 @@ class _SalesScreenState extends State<SalesScreen> {
                     }
 
                     try {
-                      final currentStock =
-                          selectedProduct!['current_stock']?['current_stock'] ??
-                          selectedProduct!['stock'] ??
-                          0;
+                      final currentStock = selectedProduct!['current_stock']?['current_stock'] ??
+                          selectedProduct!['stock'] ?? 0;
 
                       if (quantity > currentStock) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(
-                              'Stock insuffisant (Disponible: $currentStock)',
-                            ),
+                            content: Text('Stock insuffisant (Disponible: $currentStock)'),
                             backgroundColor: Colors.orange,
                           ),
                         );
                         return;
                       }
 
+                      // ✅ APPEL RPC AVEC BUSINESS ID DYNAMIQUE
                       await _supabase.rpc(
                         'create_sale_with_stock_update',
                         params: {
@@ -631,14 +517,15 @@ class _SalesScreenState extends State<SalesScreen> {
                           'p_quantity': quantity,
                           'p_total_price': totalAmount,
                           'p_sale_date': saleDate.toIso8601String(),
-                          'p_client': customerCtrl.text.trim().isEmpty
-                              ? null
-                              : customerCtrl.text.trim(),
+                          'p_client': customerCtrl.text.trim().isEmpty ? null : customerCtrl.text.trim(),
+                          'p_business_id': businessId, // ✅ DYNAMIQUE
                         },
                       );
 
+                      // ✅ Rafraîchit le provider après création
+                      ref.invalidate(salesProvider);
+                      
                       if (mounted) {
-                        await _loadData();
                         Navigator.pop(dialogContext);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -666,16 +553,12 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 8. Dialogue d'édition de vente
   Future<void> _showEditSaleDialog(Map<String, dynamic> sale) async {
     Map<String, dynamic>? selectedProduct;
-    final quantityCtrl = TextEditingController(
-      text: sale['quantity'].toString(),
-    );
+    final quantityCtrl = TextEditingController(text: sale['quantity'].toString());
     final amountCtrl = TextEditingController(text: sale['amount'].toString());
     final customerCtrl = TextEditingController(text: sale['customer'] ?? '');
-    DateTime saleDate =
-        DateTime.tryParse(sale['sale_date'] ?? '') ?? DateTime.now();
+    DateTime saleDate = DateTime.tryParse(sale['sale_date'] ?? '') ?? DateTime.now();
     bool paid = sale['paid'] ?? true;
     bool locked = sale['locked'] ?? false;
     final oldQuantity = sale['quantity'] as int? ?? 0;
@@ -702,28 +585,10 @@ class _SalesScreenState extends State<SalesScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _supabase
-                          .from('products')
-                          .select('id, name, stock')
-                          .order('name'),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return const Text('Aucun produit disponible');
-                        }
-                        return _buildProductDropdown(
-                          products: snapshot.data!,
-                          selectedProduct: selectedProduct,
-                          onChanged: (value) =>
-                              setState(() => selectedProduct = value),
-                        );
-                      },
+                    _buildProductDropdown(
+                      products: _products,
+                      selectedProduct: selectedProduct,
+                      onChanged: (value) => setState(() => selectedProduct = value),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -737,10 +602,8 @@ class _SalesScreenState extends State<SalesScreen> {
                     const SizedBox(height: 16),
                     _buildDatePickerButton(
                       context: context,
-                      label:
-                          'Date: ${DateFormat('dd/MM/yyyy').format(saleDate)}',
-                      onDateSelected: (picked) =>
-                          setState(() => saleDate = picked),
+                      label: 'Date: ${DateFormat('dd/MM/yyyy').format(saleDate)}',
+                      onDateSelected: (picked) => setState(() => saleDate = picked),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -749,15 +612,10 @@ class _SalesScreenState extends State<SalesScreen> {
                         labelText: 'Montant total (CFA) *',
                         border: OutlineInputBorder(),
                         hintText: 'Exemple : 375000 ou 375.50',
-                        helperText: 'Utilisez le point (.) pour les décimales',
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d*\.?\d{0,2}'),
-                        ),
+                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -801,96 +659,37 @@ class _SalesScreenState extends State<SalesScreen> {
 
                     try {
                       final quantity = int.parse(quantityCtrl.text.trim());
-                      final montantText = amountCtrl.text
-                          .trim()
-                          .replaceAll(',', '.')
-                          .replaceAll(' ', '');
+                      final montantText = amountCtrl.text.trim().replaceAll(',', '.').replaceAll(' ', '');
                       final amount = double.tryParse(montantText) ?? 0.0;
 
                       if (amount <= 0) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Montant invalide (ex. 375000 ou 375.50)',
-                            ),
-                          ),
+                          const SnackBar(content: Text('Montant invalide')),
                         );
                         return;
                       }
 
-                      if (oldProductId != selectedProduct!['id']) {
-                        final oldProductRes = await _supabase
-                            .from('products')
-                            .select('stock')
-                            .eq('id', oldProductId)
-                            .single();
-                        final oldCurrentStock =
-                            (oldProductRes['stock'] as int?) ?? 0;
-                        await _supabase
-                            .from('products')
-                            .update({'stock': oldCurrentStock + oldQuantity})
-                            .eq('id', oldProductId);
-                      }
+                      await _supabase.from('sales').update({
+                        'product_id': selectedProduct!['id'],
+                        'quantity': quantity,
+                        'amount': amount,
+                        'sale_date': saleDate.toIso8601String(),
+                        'customer': customerCtrl.text.trim().isEmpty ? null : customerCtrl.text.trim(),
+                        'paid': paid,
+                        'locked': locked,
+                      }).eq('id', sale['id']);
 
-                      final productRes = await _supabase
-                          .from('products')
-                          .select('stock')
-                          .eq('id', selectedProduct!['id'])
-                          .single();
-                      final currentStock = (productRes['stock'] as int?) ?? 0;
-                      final adjustedStock =
-                          (oldProductId == selectedProduct!['id']
-                              ? currentStock + oldQuantity
-                              : currentStock) -
-                          quantity;
-
-                      if (adjustedStock < 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Stock insuffisant après ajustement ! Disponible : ${currentStock + (oldProductId == selectedProduct!['id'] ? oldQuantity : 0)}',
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-
-                      await _supabase
-                          .from('sales')
-                          .update({
-                            'product_id': selectedProduct!['id'],
-                            'quantity': quantity,
-                            'amount': amount,
-                            'sale_date': saleDate.toIso8601String(),
-                            'customer': customerCtrl.text.trim().isEmpty
-                                ? null
-                                : customerCtrl.text.trim(),
-                            'paid': paid,
-                            'locked': locked,
-                          })
-                          .eq('id', sale['id']);
-
-                      await _updateProductStock(
-                        selectedProduct!['id'],
-                        -quantity,
-                      );
+                      ref.invalidate(salesProvider);
 
                       if (mounted) {
-                        await _loadData();
                         Navigator.pop(dialogContext);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Vente modifiée et stock ajusté'),
-                          ),
+                          const SnackBar(content: Text('Vente modifiée')),
                         );
                       }
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Erreur modification : ${e.toString()}',
-                          ),
-                        ),
+                        SnackBar(content: Text('Erreur: ${e.toString()}')),
                       );
                     }
                   },
@@ -904,7 +703,6 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 9. Suppression de vente
   Future<void> _deleteSale(Map<String, dynamic> sale) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -935,28 +733,31 @@ class _SalesScreenState extends State<SalesScreen> {
       await _supabase.from('sales').delete().eq('id', sale['id']);
       await _updateProductStock(productId, quantity);
 
+      ref.invalidate(salesProvider);
+
       if (mounted) {
-        await _loadData();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vente supprimée et stock remis')),
+          const SnackBar(content: Text('Vente supprimée')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur suppression : ${e.toString()}')),
+          SnackBar(content: Text('Erreur: ${e.toString()}')),
         );
       }
     }
   }
 
-  // 10. Méthode build principale
   @override
   Widget build(BuildContext context) {
-    final total = _filteredSales.fold<num>(
-      0,
-      (sum, item) => sum + (item['amount'] as num? ?? 0),
+    final salesAsync = ref.watch(salesProvider);
+    final total = salesAsync.when(
+      data: (sales) => sales.fold<double>(0.0, (sum, sale) => sum + sale.amount),
+      loading: () => 0.0,
+      error: (_, __) => 0.0,
     );
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmall = screenWidth < 400;
 
@@ -971,45 +772,61 @@ class _SalesScreenState extends State<SalesScreen> {
                 shape: BoxShape.circle,
                 color: AppColors.salesLight,
               ),
-              child: Icon(
-                Icons.filter_list,
-                color: AppColors.salesAccent,
-                size: 22,
-              ),
+              child: Icon(Icons.filter_list, color: AppColors.salesAccent, size: 22),
             ),
-            onPressed: () {
-              // Implémentation du filtre si nécessaire
-            },
+            onPressed: () {},
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildTabButton('Liste', _selectedTab == 'Liste'),
-                      _buildTabButton(
-                        'Dashboard annuel',
-                        _selectedTab == 'Dashboard annuel',
-                      ),
-                    ],
-                  ),
+      body: salesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text('Erreur: $err')),
+        data: (sales) {
+          final filteredSales = _filterSales(sales);
+          
+          return Column(
+            children: [
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildTabButton('Liste', _selectedTab == 'Liste'),
+                    _buildTabButton('Dashboard annuel', _selectedTab == 'Dashboard annuel'),
+                  ],
                 ),
-                if (_selectedTab == 'Liste') ...[
-                  _buildTotalCard(total, isSmall),
-                  _buildPeriodFilterChips(),
-                  Expanded(child: _buildSalesList()),
-                ] else ...[
-                  Expanded(child: _buildCompactAnnualDashboard()),
-                ],
+              ),
+              if (_selectedTab == 'Liste') ...[
+                _buildTotalCard(total, isSmall),
+                _buildPeriodFilterChips(),
+                Expanded(
+                  child: filteredSales.isEmpty
+                      ? const Center(child: Text('Aucune vente trouvée'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                          itemCount: filteredSales.length,
+                          itemBuilder: (context, index) {
+                            final sale = filteredSales[index];
+                            return CompactSaleCard(
+                              productName: sale.productName ?? 'Inconnu',
+                              amount: sale.amount,
+                              quantity: sale.quantity,
+                              date: DateFormat('yyyy-MM-dd').format(sale.saleDate),
+                              isLocked: sale.locked,
+                              onEdit: () => _showEditSaleDialog(sale.toJson()),
+                              onDelete: () => _deleteSale(sale.toJson()),
+                            );
+                          },
+                        ),
+                ),
+              ] else ...[
+                Expanded(child: _buildCompactAnnualDashboard()),
               ],
-            ),
+            ],
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         mini: isSmall,
         backgroundColor: AppColors.salesAccent,

@@ -13,7 +13,8 @@ class SecureStorageService {
   static const String _tokenKey = 'auth_token';
   static const String _userIdKey = 'user_id';
   static const String _roleKey = 'user_role';
-  static const String _businessIdKey = 'business_id';
+  // ❌ SUPPRIMÉ : business_id ne doit pas être stocké séparément
+  // Il fait partie du UserModel et doit être lu depuis authProvider uniquement
 
   static Future<void> setToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);
@@ -39,15 +40,12 @@ class SecureStorageService {
     return await _storage.read(key: _roleKey);
   }
 
-  static Future<void> setBusinessId(String businessId) async {
-    await _storage.write(key: _businessIdKey, value: businessId);
-  }
-
-  static Future<String?> getBusinessId() async {
-    return await _storage.read(key: _businessIdKey);
-  }
+  // ❌ SUPPRIMÉES : setBusinessId et getBusinessId
+  // Le business_id doit toujours être lu depuis authProvider.currentUser.businessId
+  // Stocker séparément cause des bugs de cache entre utilisateurs
 
   static Future<void> clearAll() async {
     await _storage.deleteAll();
+    print('🧹 SecureStorage - Tout supprimé');
   }
 }

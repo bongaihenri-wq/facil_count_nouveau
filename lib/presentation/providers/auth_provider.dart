@@ -3,7 +3,6 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/secure_storage_service.dart';
 import '../../data/models/user_model.dart';
 
-// Provider global
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier();
 });
@@ -41,41 +40,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier() : super(AuthState());
 
-  // Initialisation - vérifie si déjà connecté
   Future<void> initialize() async {
     state = state.copyWith(isLoading: true);
     
     try {
-      final isLoggedIn = await _authService.isLoggedIn();
-      if (isLoggedIn) {
+      final token = await SecureStorageService.getToken();
+      if (token != null) {
         final user = await _authService.getCurrentUser();
         state = state.copyWith(currentUser: user, isLoading: false);
+        print('✅ Auth initialisé - user: ${user?.id}, businessId: ${user?.businessId}');
       } else {
         state = state.copyWith(isLoading: false);
+        print('🚫 Pas de token');
       }
     } catch (e) {
+      await SecureStorageService.clearAll();
       state = state.copyWith(error: e.toString(), isLoading: false);
+      print('❌ Erreur init: $e');
     }
-    print('🔍 Initialisation auth...');
-    print('🔍 Token existant: ${await SecureStorageService.getToken()}');
   }
 
-  // Login
   Future<bool> login(String phoneNumber, String password) async {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
       final user = await _authService.login(phoneNumber, password);
       state = state.copyWith(currentUser: user, isLoading: false);
+      print('✅ Login - user: ${user?.id}, businessId: ${user?.businessId}');
       return true;
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
       return false;
     }
-    
   }
 
-  // Register
   Future<bool> register({
     required String phoneNumber,
     required String password,
@@ -106,13 +104,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // Logout
   Future<void> logout() async {
+    print('🧹 Déconnexion...');
     await _authService.logout();
+    await SecureStorageService.clearAll();
     state = AuthState();
+    print('✅ Déconnexion complète');
   }
 
-  // Update profile
   Future<bool> updateProfile(Map<String, dynamic> data) async {
     if (state.currentUser == null) return false;
     
@@ -128,23 +127,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // ========== MÉTHODES MANQUANTES POUR USER MANAGEMENT ==========
-
-  // Récupérer tous les utilisateurs du business (admin only)
   Future<List<UserModel>> getBusinessUsers() async {
     if (state.currentUser == null || !state.currentUser!.isAdmin) {
       return [];
     }
 
     try {
-      return await _authService.getBusinessUsers(state.currentUser!.businessId);
+      return await _authService.getBusinessUsers(state.currentUser!.businessId!);
     } catch (e) {
       state = state.copyWith(error: e.toString());
       return [];
     }
   }
 
-  // Créer un nouvel utilisateur (admin only)
   Future<bool> createUser({
     required String phoneNumber,
     required String password,
@@ -164,7 +159,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _authService.createUser(
         phoneNumber: phoneNumber,
         password: password,
-        businessId: state.currentUser!.businessId,
+        businessId: state.currentUser!.businessId!,
         firstName: firstName,
         lastName: lastName,
         email: email,
@@ -178,7 +173,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // Activer/désactiver un utilisateur (admin only)
   Future<bool> toggleUserStatus(String userId, bool isActive) async {
     if (state.currentUser == null || !state.currentUser!.isAdmin) {
       return false;
@@ -195,5 +189,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  // Méthode corrigée
+  Future<String?> getCurrentBusinessId() async {
+    final user = await _authService.getCurrentUser();
+    return user?.businessId;
   }
 }

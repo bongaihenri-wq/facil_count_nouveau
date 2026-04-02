@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/secure_storage_service.dart';
+import '../../../core/services/auth_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/role_badge.dart';
 import '../auth/login_screen.dart';
@@ -213,7 +213,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   leading: const Icon(Icons.business, color: AppColors.primary),
                   title: const Text('Commerce'),
                   subtitle: FutureBuilder<String?>(
-                    future: SecureStorageService.getBusinessId(),
+                    future: AuthService().getCurrentBusinessId(),
                     builder: (context, snapshot) {
                       return Text(
                         snapshot.data ?? 'Chargement...',
