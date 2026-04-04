@@ -5,7 +5,8 @@ import '../../providers/invoice_provider.dart';
 import 'widgets/invoice_card.dart';
 import 'widgets/invoice_filter_chips.dart';
 import 'invoice_detail_screen.dart';
-import 'dialogs/add_invoice_dialog.dart';
+// 🟢 MODIFICATION : Importation du dialogue unifié
+import 'dialogs/invoice_form_dialog.dart'; 
 
 class InvoicesScreen extends ConsumerWidget {
   const InvoicesScreen({super.key});
@@ -13,6 +14,9 @@ class InvoicesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final invoicesAsync = ref.watch(filteredInvoicesProvider);
+    invoicesAsync.whenData((liste) {
+      print('📱 ECRAN - Nombre de factures reçues par le Provider : ${liste.length}');
+    });
     final stats = ref.watch(invoiceStatsProvider);
 
     return Scaffold(
@@ -60,7 +64,8 @@ class InvoicesScreen extends ConsumerWidget {
         error: (err, _) => Center(child: Text('Erreur: $err')),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showAddInvoiceDialog(context),
+        // 🟢 MODIFICATION : Appel de notre boîte de dialogue unifiée
+        onPressed: () => showInvoiceDialog(context),
         backgroundColor: Colors.purple.shade700,
         icon: const Icon(Icons.add_photo_alternate),
         label: const Text('Nouvelle'),
@@ -157,7 +162,7 @@ class InvoicesScreen extends ConsumerWidget {
   }
 }
 
-// Filter bottom sheet
+// Filtre Bottom Sheet
 class _FilterBottomSheet extends ConsumerWidget {
   const _FilterBottomSheet();
 
@@ -166,7 +171,7 @@ class _FilterBottomSheet extends ConsumerWidget {
     final statusFilter = ref.watch(invoiceStatusFilterProvider);
     
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(50),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

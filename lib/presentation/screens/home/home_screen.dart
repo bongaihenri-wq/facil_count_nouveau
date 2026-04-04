@@ -8,12 +8,13 @@ import 'widgets/more_menu.dart';
 import '../purchases/purchase_body.dart';
 import '../sales/sale_body.dart';
 import 'widgets/quick_add_sheet.dart';
-import '../../widgets/sync/sync_indicator.dart'; // ✅ AJOUTÉ
-import '../sales/dialogs/filter_dialog.dart' as sale_dialogs;
-import '../sales/dialogs/add_sale_dialog.dart' as sale_dialogs;
-import '../purchases/dialogs/filter_purchase_dialog.dart' as purchase_dialogs;
-import '../purchases/dialogs/add_purchase_dialog.dart' as purchase_dialogs;
+import '../../widgets/sync/sync_indicator.dart';
 
+// 🔥 CORRECTION DES IMPORTS : On n'utilise plus de "as alias" pour éviter les conflits
+import '../sales/dialogs/filter_dialog.dart';
+import '../sales/dialogs/add_sale_dialog.dart';
+import '../purchases/dialogs/filter_purchase_dialog.dart';
+import '../purchases/dialogs/add_purchase_dialog.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -43,10 +44,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         foregroundColor: Colors.white,
         elevation: 2,
         centerTitle: true,
-        // ✅ SYNC INDICATOR TOUJOURS VISIBLE + actions spécifiques
         actions: [
-          const SyncIndicator(), // 🔴 TOUJOURS EN PREMIER
-          ..._buildAppBarActions(), // Actions spécifiques à l'onglet
+          const SyncIndicator(), 
+          ..._buildAppBarActions(), 
         ],
       ),
       body: _screens[_currentIndex],
@@ -86,9 +86,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // ✅ NAV ICON AVEC BADGE DE SYNC (optionnel - pour montrer les conflits dans la nav)
   Widget _buildNavIcon(IconData icon, int index) {
-    // Seulement pour l'onglet "Plus" qui pourrait montrer les réglages/conflits
     if (index == 3) {
       return Consumer(
         builder: (context, ref, child) {
@@ -110,7 +108,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Icon(icon);
   }
 
-  // ✅ ACTIONS SPÉCIFIQUES À CHAQUE ONGLET (sans SyncIndicator qui est global)
   List<Widget> _buildAppBarActions() {
     switch (_currentIndex) {
       case 1: // Achats
@@ -130,13 +127,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: filters.isActive ? Colors.white : Colors.white70,
                   size: filters.isActive ? 28 : 24,
                 ),
-                onPressed: () => purchase_dialogs.showPurchaseFilterDialog(context),
+                // 🔥 MODIFIÉ : Appel direct sans alias
+                onPressed: () => showPurchaseFilterDialog(context),
               ),
             );
           }),
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => purchase_dialogs.showAddPurchaseDialog(context),
+            // 🔥 MODIFIÉ : Utilisation directe de showDialog
+            onPressed: () => _openAddPurchaseDialog(),
           ),
         ];
       case 2: // Ventes
@@ -156,18 +155,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: filters.isActive ? Colors.white : Colors.white70,
                   size: filters.isActive ? 28 : 24,
                 ),
-                onPressed: () => sale_dialogs.showSaleFilterDialog(context),
+                // 🔥 MODIFIÉ : Appel direct sans alias
+                onPressed: () => showSaleFilterDialog(context),
               ),
             );
           }),
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => sale_dialogs.showAddSaleDialog(context),
+            // 🔥 MODIFIÉ : Utilisation directe de showDialog
+            onPressed: () => _openAddSaleDialog(),
           ),
         ];
-      default: // Accueil (0) et Plus (3)
+      default:
         return [
-          // ✅ Menu pour accès rapide aux conflits depuis Accueil/Plus
           if (_currentIndex == 0 || _currentIndex == 3)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
@@ -240,7 +240,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  // ✅ SYNC MANUEL AVEC SNACKBAR FEEDBACK
   void _manualSync() {
     ref.read(syncStateProvider.notifier).sync();
     
@@ -279,17 +278,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } else if (_currentIndex == 1) {
       return FloatingActionButton(
         backgroundColor: Colors.blue[700],
-        onPressed: () => purchase_dialogs.showAddPurchaseDialog(context),
+        // 🔥 MODIFIÉ : Utilisation directe de showDialog
+        onPressed: () => _openAddPurchaseDialog(),
         child: const Icon(Icons.add, color: Colors.white),
       );
     } else if (_currentIndex == 2) {
       return FloatingActionButton(
         backgroundColor: Colors.green[700],
-        onPressed: () => sale_dialogs.showAddSaleDialog(context),
+        // 🔥 MODIFIÉ : Utilisation directe de showDialog
+        onPressed: () => _openAddSaleDialog(),
         child: const Icon(Icons.add, color: Colors.white),
       );
     }
     return null;
+  }
+
+  // 🔥 NOUVELLE MÉTHODE : Pour ouvrir la boîte des ventes
+  void _openAddSaleDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => const AddSaleDialog(),
+    );
+  }
+
+  // 🔥 NOUVELLE MÉTHODE : Pour ouvrir la boîte des achats
+  void _openAddPurchaseDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => const AddPurchaseDialog(), // Ajuste si le widget s'appelle autrement
+    );
   }
 
   Color _getAppBarColor() {

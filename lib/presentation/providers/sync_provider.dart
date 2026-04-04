@@ -1,8 +1,8 @@
 import 'package:facil_count_nouveau/data/local/database_extensions.dart';
+import 'package:facil_count_nouveau/data/models/sync_models.dart' show Conflict;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:facil_count_nouveau/data/local/app_database.dart';
-import 'package:facil_count_nouveau/data/models/sync_models.dart';
 import 'package:facil_count_nouveau/core/services/sync_service.dart';
 import 'package:facil_count_nouveau/core/services/sync_queue_manager.dart';
 
@@ -16,7 +16,6 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
 
 // ==================== SERVICES ====================
 
-// ✅ SyncService prend AppDatabase ET SupabaseClient
 final syncServiceProvider = Provider<SyncService>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final supabase = ref.watch(supabaseClientProvider);
@@ -27,7 +26,6 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return service;
 });
 
-// ✅ CORRIGÉ : SyncQueueManager prend AppDatabase, SupabaseClient ET SyncService
 final syncQueueManagerProvider = Provider<SyncQueueManager>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final supabase = ref.watch(supabaseClientProvider);
@@ -60,11 +58,12 @@ final pendingConflictsProvider = FutureProvider<List<Conflict>>((ref) async {
 
 // ==================== NOTIFIER ====================
 
-// 🔥 CORRIGÉ : Typage non-nullable
-class SyncState extends StateNotifier<AsyncValue<SyncResult>> {
+// 🔥 CORRECTION : Ajout du point d'interrogation 'SyncResult?' pour autoriser un état de base nul
+class SyncNotifier extends StateNotifier<AsyncValue<SyncResult?>> {
   final SyncService _syncService;
 
-  SyncState(this._syncService) : super(const AsyncValue.data(null as SyncResult));
+  // 🔥 CORRECTION : On initialise avec null proprement, sans forcer le cast 'as SyncResult'
+  SyncNotifier(this._syncService) : super(const AsyncValue.data(null));
 
   Future<void> sync() async {
     state = const AsyncValue.loading();
@@ -94,8 +93,8 @@ class SyncState extends StateNotifier<AsyncValue<SyncResult>> {
   }
 }
 
-// 🔥 CORRIGÉ : Typage non-nullable
-final syncStateProvider = StateNotifierProvider<SyncState, AsyncValue<SyncResult>>((ref) {
+// 🔥 CORRECTION : Mise à jour du type ici aussi et renommage logique en SyncNotifier
+final syncStateProvider = StateNotifierProvider<SyncNotifier, AsyncValue<SyncResult?>>((ref) {
   final syncService = ref.watch(syncServiceProvider);
-  return SyncState(syncService);
+  return SyncNotifier(syncService);
 });

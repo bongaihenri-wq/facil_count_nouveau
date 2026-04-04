@@ -54,11 +54,14 @@ class SaleList extends StatelessWidget {
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                 itemCount: filteredSales.length,
-                itemBuilder: (context, index) => SaleCard(
-                  sale: filteredSales[index],
-                  onEdit: () => _showEditDialog(context, ref, filteredSales[index]),
-                  onDelete: () => _confirmDelete(context, ref, filteredSales[index]),
-                ),
+                itemBuilder: (context, index) {
+                  final sale = filteredSales[index];
+                  return SaleCard(
+                    sale: sale,
+                    onEdit: () => _showEditDialog(context, ref, sale),
+                    onDelete: () => _confirmDelete(context, ref, sale),
+                  );
+                },
               ),
             ),
           ],
@@ -153,7 +156,11 @@ class SaleList extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirmer la suppression'),
-        content: const Text('Voulez-vous vraiment supprimer cette vente ?'),
+        content: Text(
+          'Voulez-vous vraiment supprimer cette vente ?\n\n'
+          '${sale.quantity} x ${sale.productName ?? "Produit"}\n'
+          'Montant: ${sale.formattedAmount}',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -161,10 +168,30 @@ class SaleList extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () async {
-              await ref.read(saleNotifierProvider.notifier).deleteSale(sale);
-              ref.invalidate(salesProvider);
-              ref.invalidate(productsProvider);
-              Navigator.pop(context);
+              try {
+                await ref.read(saleNotifierProvider.notifier).deleteSale(sale);
+                ref.invalidate(salesProvider);
+                ref.invalidate(productsProvider);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('✅ Vente supprimée'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('❌ Erreur: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Supprimer', style: TextStyle(color: Colors.white)),

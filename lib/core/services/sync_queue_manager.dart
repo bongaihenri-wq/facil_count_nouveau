@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
 import '../../core/services/sync_service.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/database_extensions.dart';
@@ -15,7 +14,7 @@ class SyncQueueManager {
 
   SyncQueueManager(this._db, this._supabase, this._syncService);
 
-  /// 🔥🔥🔥 AJOUTE UNE VENTE : Local + Queue + Sync immédiat
+  /// 🔥 AJOUTE UNE VENTE : Local + Queue + Sync immédiat
   Future<void> queueSale(SaleModel sale) async {
     final now = DateTime.now();
 
@@ -54,7 +53,8 @@ class SyncQueueManager {
         businessId: Value(sale.businessId),
         saleDate: Value(sale.saleDate),
         totalAmount: Value(sale.amount),
-        items: Value(jsonEncode([sale.toJson()])), // Stocke la vente complète
+        // Plus de crochets [ ] autour de sale.toJson()
+        items: Value(jsonEncode(sale.toJson())), 
         isSynced: const Value(false),
         createdAt: Value(now),
         updatedAt: Value(now),
@@ -68,7 +68,7 @@ class SyncQueueManager {
   Future<void> _addToSyncQueue(SaleModel sale, DateTime now) async {
     final id = _generateId();
 
-    // 🔥 PRÉPARE LE PAYLOAD AVEC TOUTES LES DONNÉES NÉCESSAIRES
+    // PRÉPARE LE PAYLOAD AVEC TOUTES LES DONNÉES NÉCESSAIRES
     final payload = {
       ...sale.toJson(),
       'sync_id': id,
@@ -78,7 +78,7 @@ class SyncQueueManager {
     await _db.into(_db.syncQueue).insert(
       SyncQueueCompanion(
         id: Value(id),
-        opType: const Value('insert'), // 🔥 'insert' pas 'sale'
+        opType: const Value('insert'), // 'insert' pas 'sale'
         recId: Value(sale.id),
         tblName: const Value('sales'),
         payload: Value(jsonEncode(payload)),
@@ -90,7 +90,7 @@ class SyncQueueManager {
     print('✅ Vente ajoutée à la file d\'attente: $id');
   }
 
-  /// Récupère toutes les ventes locales (sync et non-sync)
+  /// 🔥 MODIFIÉ : Récupère toutes les ventes locales avec le nom du produit injecté
   Future<List<SaleModel>> getLocalSales(String businessId) async {
     final query = _db.select(_db.localSales)
       ..where((s) => s.businessId.equals(businessId))
@@ -100,15 +100,31 @@ class SyncQueueManager {
     
     print('🔍 SyncQueueManager - Ventes locales trouvées: ${localSales.length}');
 
-    return localSales.expand((sale) {
+    // 🔥 ÉTAPE 1 : Récupérer tous les produits en local pour faire le lien
+    final allProducts = await _db.select(_db.localProducts).get();
+    final Map<String, String> productNames = {
+      for (var p in allProducts) p.id: p.name
+    };
+
+    final List<SaleModel> parsedSales = [];
+
+    for (final sale in localSales) {
       try {
-        final items = jsonDecode(sale.items) as List<dynamic>;
-        return items.map((item) => SaleModel.fromJson(item as Map<String, dynamic>));
+        final Map<String, dynamic> saleMap = jsonDecode(sale.items);
+        
+        // 🔥 ÉTAPE 2 : Si le nom du produit n'est pas dans le JSON, on l'injecte
+        if (saleMap['product_name'] == null) {
+          final productId = saleMap['product_id'] ?? saleMap['productId'];
+          saleMap['product_name'] = productNames[productId] ?? 'Produit inconnu';
+        }
+
+        parsedSales.add(SaleModel.fromJson(saleMap));
       } catch (e) {
         print('❌ Erreur parsing vente locale ${sale.id}: $e');
-        return <SaleModel>[];
       }
-    }).toList();
+    }
+
+    return parsedSales;
   }
 
   String _generateId() {

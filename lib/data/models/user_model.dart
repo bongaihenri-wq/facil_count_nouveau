@@ -41,6 +41,52 @@ class UserModel {
     );
   }
 
-  String get fullName => '$firstName $lastName';
+  // 🟢 Concaténation propre du nom complet
+  String get fullName {
+    final trimmedFirst = firstName.trim();
+    final trimmedLast = lastName.trim();
+    if (trimmedFirst.isEmpty && trimmedLast.isEmpty) return 'Utilisateur';
+    return '$trimmedFirst $trimmedLast'.trim();
+  }
+
+  // 🟢 Retourne la première lettre sécurisée (évite les crashs si le nom est vide)
+  String get initial {
+    if (firstName.trim().isNotEmpty) {
+      return firstName.trim().substring(0, 1).toUpperCase();
+    } else if (lastName.trim().isNotEmpty) {
+      return lastName.trim().substring(0, 1).toUpperCase();
+    }
+    return 'U'; // Par défaut
+  }
+
   bool get isAdmin => role == 'admin';
+
+  // 🟢 Très utile pour mettre à jour un utilisateur dans Riverpod
+  UserModel copyWith({
+    String? id,
+    String? phoneNumber,
+    String? password,
+    String? businessId,
+    String? role,
+    String? firstName,
+    String? lastName,
+    String? email,
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      password: password ?? this.password,
+      businessId: businessId ?? this.businessId,
+      role: role ?? this.role,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      email: email ?? this.email,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }

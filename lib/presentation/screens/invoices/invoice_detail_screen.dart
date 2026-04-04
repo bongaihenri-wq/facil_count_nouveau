@@ -1,9 +1,9 @@
+import 'package:facil_count_nouveau/presentation/screens/invoices/widgets/invoice_image_viewer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/invoice_model.dart';
-import '../../../core/utils/formatters.dart';
 import '../../providers/invoice_provider.dart';
-import 'widgets/invoice_image_viewer.dart';
+import 'dialogs/invoice_form_dialog.dart'; 
 
 class InvoiceDetailScreen extends ConsumerWidget {
   final InvoiceModel invoice;
@@ -13,443 +13,434 @@ class InvoiceDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Column(
-        children: [
-          // ✅ HEADER AVEC INFOS (overlay transparent)
-          _buildHeader(context, ref),
-          
-          // ✅ IMAGE ZOOMABLE (prend tout l'espace)
-          Expanded(
-            child: InvoiceImageViewer(
-              imageUrl: invoice.imageUrl,
-              placeholder: _buildPlaceholder(),
-            ),
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        title: Text(
+          invoice.number != null ? 'Facture ${invoice.number}' : 'Détails Facture',
+        ),
+        backgroundColor: Colors.purple.shade700,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          // Bouton Modifier
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () => showInvoiceDialog(context, invoice: invoice),
           ),
-          
-          // ✅ BARRE D'ACTIONS EN BAS
-          _buildBottomBar(context, ref),
+          // Bouton Supprimer
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _confirmDelete(context, ref),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, WidgetRef ref) {
-    return Container(
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 16,
-        left: 16,
-        right: 16,
-        bottom: 16,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withOpacity(0.9),
-            Colors.black.withOpacity(0.6),
-            Colors.transparent,
-          ],
-        ),
-      ),
-      child: SafeArea(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Ligne du haut : retour + actions
-            Row(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-                const Spacer(),
-                if (invoice.locked)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.orange),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.lock, color: Colors.orange, size: 16),
-                        SizedBox(width: 4),
-                        Text(
-                          'Verrouillée',
-                          style: TextStyle(color: Colors.orange, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, color: Colors.white),
-                    color: Colors.grey.shade900,
-                    onSelected: (value) => _handleMenuAction(context, ref, value),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, color: Colors.blue),
-                            SizedBox(width: 8),
-                            Text('Modifier', style: TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'share',
-                        child: Row(
-                          children: [
-                            Icon(Icons.share, color: Colors.green),
-                            SizedBox(width: 8),
-                            Text('Partager', style: TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Supprimer', style: TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            // 🔍 SECTION IMAGE AVEC ZOOM INTERACTIF
+            _buildImageSection(context),
             const SizedBox(height: 20),
-            
-            // Type + Numéro
-            Row(
-              children: [
-                _buildTypeBadge(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'N° ${invoice.number}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            
-            // Montant (gros)
-            Text(
-              Formatters.formatCurrency(invoice.amount),
-              style: TextStyle(
-                color: _getAmountColor(),
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            // Date + Fournisseur
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, color: Colors.white70, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  Formatters.formatDate(invoice.invoiceDate),
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                if (invoice.supplier != null) ...[
-                  const SizedBox(width: 16),
-                  const Icon(Icons.business, color: Colors.white70, size: 16),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      invoice.supplier!,
-                      style: const TextStyle(color: Colors.white70, fontSize: 14),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (invoice.notes != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.notes, color: Colors.white70, size: 16),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        invoice.notes!,
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+
+            // SECTION INFORMATIONS
+            _buildInfoCard(context, ref),
+            const SizedBox(height: 16),
+
+            // SECTION NOTES
+            if (invoice.notes != null && invoice.notes!.isNotEmpty)
+              _buildNotesCard(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBottomBar(BuildContext context, WidgetRef ref) {
-    final isPaid = invoice.status == 'Payée';
+  /// Widget pour l'image avec un effet de pincement pour zoomer
+ /// Widget pour l'image avec ouverture plein écran au clic et zoom
+  Widget _buildImageSection(BuildContext context) {
+    if (invoice.imageUrl == null || invoice.imageUrl!.isEmpty) {
+      return Container(
+        height: 200,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.image_not_supported, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 8),
+            Text(
+              'Aucune photo attachée',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Le placeholder à afficher pendant le chargement dans la visionneuse
+    final Widget placeholder = Container(
+      height: 350,
+      width: double.infinity,
+      color: Colors.white,
+      child: const Center(child: CircularProgressIndicator()),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Aperçu (Cliquez pour agrandir)',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
+        ),
+        const SizedBox(height: 8),
+        // 🟢 Détecteur de clic pour ouvrir l'image en plein écran
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Scaffold(
+                  backgroundColor: Colors.black,
+                  appBar: AppBar(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                  ),
+                  body: InvoiceImageViewer(
+                    imageUrl: invoice.imageUrl,
+                    placeholder: placeholder,
+                  ),
+                ),
+              ),
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              height: 350,
+              width: double.infinity,
+              color: Colors.white,
+              // Ici, on garde l'InteractiveViewer pour un petit zoom rapide directement sur l'écran
+              child: InteractiveViewer(
+                panEnabled: true,
+                minScale: 1.0,
+                maxScale: 2.5, 
+                child: Image.network(
+                  invoice.imageUrl!,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return placeholder;
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Icon(Icons.broken_image, size: 48, color: Colors.red),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Carte contenant les détails textuels de la facture
+  Widget _buildInfoCard(BuildContext context, WidgetRef ref) {
+    final formattedDate = '${invoice.invoiceDate.day}/${invoice.invoiceDate.month}/${invoice.invoiceDate.year}';
     
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            Colors.black.withOpacity(0.9),
-            Colors.black.withOpacity(0.6),
-            Colors.transparent,
-          ],
-        ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildActionButton(
-              icon: isPaid ? Icons.check_circle : Icons.pending,
-              label: isPaid ? 'Payée' : 'En attente',
-              color: isPaid ? Colors.green : Colors.orange,
-              onTap: () => _toggleStatus(context, ref),
-            ),
-            _buildActionButton(
-              icon: Icons.edit,
-              label: 'Modifier',
-              color: Colors.blue,
-              onTap: () => _editInvoice(context),
-            ),
-            _buildActionButton(
-              icon: Icons.delete,
-              label: 'Supprimer',
-              color: Colors.red,
-              onTap: () => _confirmDelete(context, ref),
+      child: Column(
+        children: [
+          _buildDetailRow(
+            label: 'Type',
+            value: invoice.type,
+            icon: _getTypeIcon(),
+            iconColor: _getTypeColor(),
+          ),
+          const Divider(height: 24),
+          _buildDetailRow(
+            label: 'Montant',
+            value: '${invoice.amount.toStringAsFixed(0)} CFA',
+            icon: Icons.account_balance_wallet,
+            iconColor: Colors.purple,
+            isBoldValue: true,
+          ),
+          const Divider(height: 24),
+          _buildDetailRow(
+            label: 'Date',
+            value: formattedDate,
+            icon: Icons.calendar_today,
+            iconColor: Colors.blue,
+          ),
+          const Divider(height: 24),
+          
+          // Ligne de statut avec un bouton pour changer à la volée
+          Row(
+            children: [
+              _buildDetailRow(
+                label: 'Statut',
+                value: invoice.status,
+                icon: invoice.status == 'Payée' ? Icons.check_circle : Icons.pending,
+                iconColor: invoice.status == 'Payée' ? Colors.green : Colors.orange,
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => _showStatusPicker(context, ref),
+                child: const Text('Changer'),
+              ),
+            ],
+          ),
+          
+          if (invoice.supplier != null && invoice.supplier!.isNotEmpty) ...[
+            const Divider(height: 24),
+            _buildDetailRow(
+              label: 'Fournisseur / Client',
+              value: invoice.supplier!,
+              icon: Icons.business,
+              iconColor: Colors.grey.shade700,
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildTypeBadge() {
-    final colors = {
-      'Achats': Colors.blue,
-      'Ventes': Colors.green,
-      'Dépenses': Colors.orange,
-    };
-    
-    final color = colors[invoice.type] ?? Colors.grey;
-    
+  /// Carte dédiée aux notes de la facture
+  Widget _buildNotesCard() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Text(
-        invoice.type,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.notes, color: Colors.grey.shade700, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Notes',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            invoice.notes!,
+            style: TextStyle(color: Colors.grey.shade800, height: 1.4),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
+  /// Génère une ligne de détail uniforme
+  Widget _buildDetailRow({
     required String label,
-    required Color color,
-    required VoidCallback onTap,
+    required String value,
+    required IconData icon,
+    required Color iconColor,
+    bool isBoldValue = false,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(color: color, fontSize: 12),
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isBoldValue ? FontWeight.bold : FontWeight.w500,
+              ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildPlaceholder() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.hide_image, size: 100, color: Colors.grey.shade700),
-          const SizedBox(height: 20),
-          const Text(
-            'Aucune image disponible',
-            style: TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getAmountColor() {
+  IconData _getTypeIcon() {
     return switch (invoice.type) {
-      'Achats' => Colors.red.shade300,
-      'Ventes' => Colors.green.shade300,
-      'Dépenses' => Colors.orange.shade300,
-      _ => Colors.white,
+      'Achats' => Icons.shopping_cart,
+      'Ventes' => Icons.point_of_sale,
+      'Dépenses' => Icons.money_off,
+      _ => Icons.receipt,
     };
   }
 
-  void _handleMenuAction(BuildContext context, WidgetRef ref, String value) {
-    switch (value) {
-      case 'edit':
-        _editInvoice(context);
-        break;
-      case 'share':
-        _shareInvoice(context);
-        break;
-      case 'delete':
-        _confirmDelete(context, ref);
-        break;
-    }
+  Color _getTypeColor() {
+    return switch (invoice.type) {
+      'Achats' => Colors.blue,
+      'Ventes' => Colors.green,
+      'Dépenses' => Colors.orange,
+      _ => Colors.grey,
+    };
   }
 
-  Future<void> _toggleStatus(BuildContext context, WidgetRef ref) async {
-    final newStatus = invoice.status == 'Payée' ? 'En attente' : 'Payée';
-    
-    try {
-      await ref.read(invoiceNotifierProvider.notifier)
-          .updateStatus(invoice.id, newStatus);
-      
-      ref.invalidate(invoicesProvider);
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Statut mis à jour: $newStatus'),
-            backgroundColor: newStatus == 'Payée' ? Colors.green : Colors.orange,
+ /// 🟢 Ouvre un menu pour changer le statut et rafraîchit l'écran
+  void _showStatusPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        // On applique ici aussi le padding de bas de page dont on parlait !
+        return SafeArea(
+          bottom: true,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Wrap(
+              children: ['En attente', 'Payée', 'Annulée'].map((status) {
+                // Définition de la couleur selon le statut pour le design
+                final Color statusColor = status == 'Payée' 
+                    ? Colors.green 
+                    : (status == 'Annulée' ? Colors.red : Colors.orange);
+                    
+                return ListTile(
+                  title: Text(
+                    status,
+                    style: TextStyle(
+                      fontWeight: invoice.status == status ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  leading: Icon(
+                    status == 'Payée' ? Icons.check_circle : Icons.pending,
+                    color: statusColor,
+                  ),
+                  trailing: invoice.status == status 
+                      ? const Icon(Icons.check, color: Colors.purple) 
+                      : null,
+                  onTap: () async {
+                    Navigator.pop(context); // Ferme le menu
+                    
+                    if (invoice.status == status) return; // Aucun changement
+                    
+                    // 1. On crée une copie de la facture avec le nouveau statut
+                    final updatedInvoice = invoice.copyWith(status: status);
+                    
+                    // 2. On lance la mise à jour dans Supabase
+                    await ref.read(invoiceNotifierProvider.notifier).updateInvoice(updatedInvoice);
+                    
+                    // 3. On force Riverpod à rafraîchir la liste générale
+                    ref.invalidate(invoicesFutureProvider);
+                    
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('✅ Statut mis à jour : "$status"'),
+                          backgroundColor: Colors.green,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      
+                      // 🔥 TRUC ET ASTUCE : On recharge l'écran de détails en revenant en arrière
+                      // et en se ré-ouvrant avec la facture mise à jour !
+                      Navigator.pop(context); // Quitte l'écran de détails actuel
+                      
+                      // Optionnel : Si tu veux le réouvrir automatiquement mis à jour :
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => InvoiceDetailScreen(invoice: updatedInvoice),
+                        ),
+                      );
+                    }
+                  },
+                );
+              }).toList(),
+            ),
           ),
         );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  void _editInvoice(BuildContext context) {
-    // TODO: Ouvrir dialog d'édition
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Édition à implémenter')),
+      },
     );
   }
 
-  void _shareInvoice(BuildContext context) {
-    // TODO: Implémenter partage
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Partage à implémenter')),
-    );
-  }
-
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final confirm = await showDialog<bool>(
+  /// Pop-up de confirmation avant suppression
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
-        title: const Text('Supprimer ?', style: TextStyle(color: Colors.white)),
-        content: Text(
-          'Supprimer la facture ${invoice.number} ?',
-          style: const TextStyle(color: Colors.white70),
-        ),
+        title: const Text('Supprimer la facture ?'),
+        content: const Text('Cette action est irréversible. Voulez-vous continuer ?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Annuler'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Supprimer'),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // Ferme la boîte de dialogue
+              
+              // 🟢 Correction : Suppression physique de l'image si elle existe
+              if (invoice.imageUrl != null && invoice.imageUrl!.isNotEmpty) {
+                await ref.read(invoiceRepositoryProvider).deleteImage(invoice.imageUrl!);
+              }
+              
+              // Suppression de la facture en BDD
+              await ref.read(invoiceNotifierProvider.notifier).deleteInvoice(invoice.id);
+              
+              // Rafraîchissement avec le BON provider
+              ref.invalidate(invoicesFutureProvider);
+              
+              if (context.mounted) {
+                Navigator.pop(context); // Revient à la liste
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Facture supprimée !'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-
-    if (confirm == true) {
-      try {
-        await ref.read(invoiceNotifierProvider.notifier).deleteInvoice(invoice.id);
-        
-        // Supprimer l'image si présente
-        if (invoice.imageUrl != null) {
-          await ref.read(invoiceRepositoryProvider).deleteImage(invoice.imageUrl!);
-        }
-        
-        ref.invalidate(invoicesProvider);
-        
-        if (context.mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Facture supprimée'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
-    }
   }
 }

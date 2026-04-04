@@ -377,7 +377,7 @@ Future<void> _submit() async {
       amount: amount,
       clientId: _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
       saleDate: _saleDate,
-      paid: _paid,
+      isPaid: _paid,
       locked: _locked,
     );
 

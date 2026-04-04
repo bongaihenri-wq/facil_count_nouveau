@@ -4,6 +4,9 @@ import '../../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/profile/user_management_screen.dart';
+import '../../screens/products/product_screen.dart';
+import '../../screens/purchases/purchase_screen.dart';
+import '../../screens/sales/sale_screen.dart';
 import 'role_badge.dart';
 
 class AppDrawer extends ConsumerWidget {
@@ -36,7 +39,8 @@ class AppDrawer extends ConsumerWidget {
                     radius: 40,
                     backgroundColor: Colors.white,
                     child: Text(
-                      user?.fullName.substring(0, 1).toUpperCase() ?? 'U',
+                      // 🟢 Utilisation de l'initiale sécurisée de ton modèle
+                      user?.initial ?? 'U', 
                       style: const TextStyle(
                         fontSize: 32,
                         color: AppColors.primary,
@@ -139,25 +143,49 @@ class AppDrawer extends ConsumerWidget {
                     ),
                   ),
                 ),
+                
+                // 🟢 Étape 1 : Lien Produits vers ProductScreen
                 ListTile(
                   leading: const Icon(Icons.inventory),
                   title: const Text('Produits'),
                   onTap: () {
                     Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ProductScreen(),
+                      ),
+                    );
                   },
                 ),
+                
+                // 🟢 Étape 2 : Lien Achats vers PurchaseScreen
                 ListTile(
                   leading: const Icon(Icons.shopping_cart),
                   title: const Text('Achats'),
                   onTap: () {
                     Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PurchaseScreen(),
+                      ),
+                    );
                   },
                 ),
+                
+                // 🟢 Étape 3 : Lien Ventes vers SalesScreen
                 ListTile(
                   leading: const Icon(Icons.sell),
                   title: const Text('Ventes'),
                   onTap: () {
                     Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SaleScreen(),
+                      ),
+                    );
                   },
                 ),
               ],
@@ -176,6 +204,9 @@ class AppDrawer extends ConsumerWidget {
               }
             },
           ),
+          
+          // 🟢 Étape 4 : Le padding demandé sous l'écran
+          const SizedBox(height: 20),
         ],
       ),
     );

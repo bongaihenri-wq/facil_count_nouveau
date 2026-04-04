@@ -1,132 +1,208 @@
+import 'package:uuid/uuid.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/sale_model.dart';
 import '../../core/utils/business_helper.dart';
-import '../../core/services/sync_queue_manager.dart';
+import '../../presentation/providers/product_provider.dart';
 
 class SaleRepository {
   final SupabaseClient _client;
   final BusinessHelper _businessHelper;
-  final SyncQueueManager? _syncManager; // 🔥 AJOUTÉ
+  final Ref _ref;
 
-  SaleRepository(this._client, this._businessHelper, {SyncQueueManager? syncManager})
-      : _syncManager = syncManager;
+  SaleRepository(this._client, this._businessHelper, this._ref);
 
+  /// 🌐 EN LIGNE : Récupère toutes les ventes directement depuis Supabase
   Future<List<SaleModel>> getSales() async {
     final businessId = await _businessHelper.getBusinessId();
-    print('🔍 SaleRepository.getSales() - filtre business_id: $businessId');
-
+    
     if (businessId.isEmpty) {
       print('❌ ERREUR: business_id est vide !');
       return [];
     }
 
     try {
-      // 🔥 RÉCUPÈRE D'ABORD LES VENTES LOCALES (non sync)
-      final localSales = await _syncManager?.getLocalSales(businessId) ?? [];
-      print('🔍 Ventes locales: ${localSales.length}');
-
-      // 🔥 RÉCUPÈRE LES VENTES SUPABASE
-      final data = await _client
+      print('🌐 Supabase - Récupération des ventes en direct...');
+      final response = await _client
           .from('sales')
           .select('*, products(name), clients(name)')
           .eq('business_id', businessId)
           .order('sale_date', ascending: false);
 
-      print('🔍 Données brutes Supabase : $data');
-      print('🔍 Nombre de ventes Supabase : ${data.length}');
-
-      // 🔥 MERGE LES DEUX LISTES (local + remote)
-      final remoteSales = (data as List).map((json) => SaleModel.fromJson(json)).toList();
+      final List<dynamic> data = response as List<dynamic>;
       
-      // Évite les doublons (par ID)
-      final allSales = <String, SaleModel>{};
-      for (var sale in remoteSales) {
-        allSales[sale.id] = sale;
-      }
-      for (var sale in localSales) {
-        if (!allSales.containsKey(sale.id)) {
-          allSales[sale.id] = sale;
+      return data.map((json) {
+        final Map<String, dynamic> saleMap = Map<String, dynamic>.from(json);
+        if (saleMap['products'] != null) {
+          saleMap['product_name'] = saleMap['products']['name'];
         }
-      }
-
-      final result = allSales.values.toList()
-        ..sort((a, b) => b.saleDate.compareTo(a.saleDate));
-
-      print('✅ Total ventes (local + remote): ${result.length}');
-      return result;
-    } catch (e, stackTrace) {
-      print('❌ Erreur lors de getSales(): $e');
-      print(stackTrace);
-      // 🔥 EN CAS D'ERREUR, RETOURNE AU MOINS LES LOCALES
-      return await _syncManager?.getLocalSales(businessId) ?? [];
+        return SaleModel.fromJson(saleMap);
+      }).toList();
+      
+    } catch (e) {
+      print('❌ Erreur getSales() Supabase: $e');
+      return [];
     }
   }
 
+ /// 🌐 EN LIGNE : Crée une vente directement sur Supabase
   Future<SaleModel> createSale({
     required String productId,
     required int quantity,
     required double amount,
     String? clientId,
     required DateTime saleDate,
+    bool isPaid = true, 
   }) async {
     final businessId = await _businessHelper.getBusinessId();
-    final userId = _client.auth.currentUser?.id;
-    
-    print('🔍 SaleRepository.createSale() - business_id: $businessId');
-    print('🔍 SaleRepository.createSale() - user_id: $userId');
 
-    if (userId == null) {
-      throw Exception('Utilisateur non authentifié');
+    try {
+      print('🌐 Supabase - Envoi direct de la vente...');
+      
+      final payload = {
+        'id': const Uuid().v4(),
+        'business_id': businessId,
+        'product_id': productId,
+        'quantity': quantity,
+        'amount': amount,
+        'client_id': clientId,
+        'sale_date': saleDate.toIso8601String(),
+        'created_at': DateTime.now().toIso8601String(),
+        'paid': isPaid,
+        'locked': false,
+      };
+
+      print('📦 Tentative d\'envoi du payload: $payload');
+
+      final data = await _client
+          .from('sales')
+          .insert(payload)
+          .select('*, products(name)') 
+          .single(); 
+
+      print('✅ Vente enregistrée avec succès dans Supabase !');
+
+      final Map<String, dynamic> responseMap = Map<String, dynamic>.from(data);
+      if (responseMap['products'] != null) {
+        responseMap['product_name'] = responseMap['products']['name'];
+      }
+
+      print('✅ Vente enregistrée avec succès sur Supabase !');
+
+      // 🔥 AJOUT ICI : Rafraîchir l'écran
+      // On demande à Riverpod de recalculer/recharger la liste des produits et des stocks
+      // Remplace 'productsProvider' par le nom exact du provider que tu utilises pour lister tes produits !
+      _ref.invalidate(productsProvider); 
+      
+      // Si tu as aussi un provider pour la liste des ventes, tu peux l'invalider ici :
+      // _ref.invalidate(salesProvider);
+
+      return SaleModel.fromJson(responseMap);
+      
+    } catch (e) {
+      print('❌ ERREUR CRÉATION VENTE SUPABASE: $e');
+      throw Exception('Échec création vente: $e');
     }
-
-    // 🔥 CRÉE LE MODÈLE COMPLET AVEC TOUTES LES DONNÉES
-    final sale = SaleModel(
-      id: const Uuid().v4(),
-      businessId: businessId, // 🔥 REQUIS
-      userId: userId, // 🔥 AJOUTÉ - CRITIQUE POUR RLS
-      productId: productId,
-      quantity: quantity,
-      amount: amount,
-      clientId: clientId,
-      saleDate: saleDate,
-      paid: true,
-      locked: false,
-      createdAt: DateTime.now(),
-    );
-
-    print('🔍 Sale créée: ${sale.toJson()}');
-
-    // 🔥🔥🔥 STRATÉGIE : Sauvegarde locale + tentative sync immédiate
-    if (_syncManager != null) {
-      // Mode avec gestion offline : passe par le queue manager
-      await _syncManager.queueSale(sale);
-      print('✅ Vente mise en file d\'attente (offline capable)');
-    } else {
-      // Mode direct (fallback) : insertion immédiate
-      await _insertDirectToSupabase(sale);
-      print('✅ Vente insérée directement');
-    }
-
-    return sale;
   }
 
-  // 🔥 MÉTHODE PRIVÉE pour insertion directe (fallback)
-  Future<void> _insertDirectToSupabase(SaleModel sale) async {
+  /// 🌐 EN LIGNE : Modifie une vente
+  Future<SaleModel> updateSale({
+    required String id,
+    required String productId,
+    required int quantity,
+    required double amount,
+    String? clientId,
+    required DateTime saleDate,
+    required bool isPaid,
+    required bool locked,
+  }) async {
+    final businessId = await _businessHelper.getBusinessId();
+
     try {
       final data = await _client
           .from('sales')
-          .insert(sale.toJson())
-          .select('*, products(name), clients(name)')
+          .update({
+            'product_id': productId,
+            'quantity': quantity,
+            'amount': amount,
+            'client_id': clientId,
+            'sale_date': saleDate.toIso8601String(),
+            'paid': isPaid,
+            'locked': locked,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id)
+          .eq('business_id', businessId)
+          .select('*, products(name)')
           .single();
 
-      print('✅ Vente insérée directement: ${data['id']}');
-    } catch (e, stackTrace) {
-      print('❌ ERREUR INSERTION DIRECTE: $e');
-      print(stackTrace);
-      throw Exception('Échec insertion vente: $e');
+      // 🛑 SUPPRESSION DU DOUBLON : Supabase gère déjà la différence de stock lors d'un update.
+      /*
+      final oldSale = await _client
+          .from('sales')
+          .select('quantity')
+          .eq('id', id)
+          .single();
+      final oldQuantity = (oldSale['quantity'] as num).toInt();
+      final quantityDiff = quantity - oldQuantity;
+      if (quantityDiff != 0) {
+        await _updateProductStock(productId, -quantityDiff, businessId);
+      }
+      */
+
+      final Map<String, dynamic> responseMap = Map<String, dynamic>.from(data);
+      if (responseMap['products'] != null) {
+        responseMap['product_name'] = responseMap['products']['name'];
+      }
+
+      return SaleModel.fromJson(responseMap);
+    } catch (e) {
+      print('❌ ERREUR UPDATE VENTE: $e');
+      throw Exception('Échec modification vente: $e');
     }
   }
 
-  Future<SaleModel> updateSale({...}) async { /* ... même logique ... */ }
-  Future<void> deleteSale(...) async { /* ... même logique ... */ }
+  /// 🌐 EN LIGNE : Supprime une vente
+  Future<void> deleteSale(String id, String productId, int quantity) async {
+    final businessId = await _businessHelper.getBusinessId();
+
+    try {
+      await _client
+          .from('sales')
+          .delete()
+          .eq('id', id)
+          .eq('business_id', businessId);
+
+      // 🛑 SUPPRESSION DU DOUBLON : Supabase recrédite déjà le stock lors d'un delete.
+      // await _updateProductStock(productId, quantity, businessId);
+      
+    } catch (e) {
+      print('❌ ERREUR DELETE VENTE: $e');
+      throw Exception('Échec suppression vente: $e');
+    }
+  }
+
+  /// 🔄 Méthode conservée au cas où tu en aies besoin ailleurs,
+  /// mais elle n'est plus appelée lors des flux de ventes classiques.
+  Future<void> _updateProductStock(String productId, int quantityDelta, String businessId) async {
+    final product = await _client
+        .from('products')
+        .select('initial_stock')
+        .eq('id', productId)
+        .eq('business_id', businessId)
+        .single();
+
+    final currentStock = (product['initial_stock'] as num).toInt();
+    final newStock = currentStock + quantityDelta;
+
+    if (newStock < 0) {
+      throw Exception('Opération impossible : le stock deviendrait négatif ($newStock).');
+    }
+
+    await _client
+        .from('products')
+        .update({'initial_stock': newStock})
+        .eq('id', productId)
+        .eq('business_id', businessId);
+  }
 }

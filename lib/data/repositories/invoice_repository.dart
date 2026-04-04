@@ -1,144 +1,95 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../data/models/invoice_model.dart';
-import '../../../core/utils/business_helper.dart';
+import '../models/invoice_model.dart';
+
 
 class InvoiceRepository {
-  final SupabaseClient _client;
-  final BusinessHelper _businessHelper;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
-  InvoiceRepository(this._client, this._businessHelper);
-
-  String get _table => 'invoices';
-
-  // ✅ CORRIGÉ : Utilise directement BusinessHelper avec retry
-  Future<String> _getBusinessId() async {
-    // Réessayer plusieurs fois si nécessaire (max 3 secondes)
-    int attempts = 0;
-    Exception? lastError;
-    
-    while (attempts < 30) {
-      try {
-        final businessId = await _businessHelper.getBusinessId();
-        if (businessId.isNotEmpty) return businessId;
-      } catch (e) {
-        lastError = e is Exception ? e : Exception(e.toString());
-        // Attendre un peu avant de réessayer
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      attempts++;
-    }
-    
-    // Si toujours pas trouvé, lever l'erreur
-    throw lastError ?? Exception('Impossible de récupérer le Business ID');
-  }
-
-  Future<List<InvoiceModel>> getInvoices() async {
-    final businessId = await _getBusinessId();
-    
-    final response = await _client
-        .from(_table)
-        .select()
-        .eq('business_id', businessId)
-        .order('invoice_date', ascending: false);
-
-    return (response as List)
-        .map((json) => InvoiceModel.fromJson(json))
-        .toList();
-  }
-
-  Future<InvoiceModel> getInvoiceById(String id) async {
-    final businessId = await _getBusinessId();
-    
-    final response = await _client
-        .from(_table)
-        .select()
-        .eq('id', id)
-        .eq('business_id', businessId)
-        .single();
-
-    return InvoiceModel.fromJson(response);
-  }
-
-  Future<void> createInvoice(InvoiceModel invoice) async {
-    final businessId = await _getBusinessId();
-    
-    await _client.from(_table).insert({
-      'type': invoice.type,
-      'number': invoice.number,
-      'invoice_date': invoice.invoiceDate.toIso8601String(),
-      'amount': invoice.amount,
-      'status': invoice.status,
-      'image_url': invoice.imageUrl,
-      'supplier': invoice.supplier,
-      'notes': invoice.notes,
-      'locked': invoice.locked,
-      'business_id': businessId,
-    });
-  }
-
-  Future<void> updateInvoice(InvoiceModel invoice) async {
-    final businessId = await _getBusinessId();
-    
-    await _client
-        .from(_table)
-        .update({
-          'type': invoice.type,
-          'number': invoice.number,
-          'invoice_date': invoice.invoiceDate.toIso8601String(),
-          'amount': invoice.amount,
-          'status': invoice.status,
-          'image_url': invoice.imageUrl,
-          'supplier': invoice.supplier,
-          'notes': invoice.notes,
-          'locked': invoice.locked,
-        })
-        .eq('id', invoice.id)
-        .eq('business_id', businessId);
-  }
-
-  Future<void> deleteInvoice(String id) async {
-    final businessId = await _getBusinessId();
-    
-    await _client
-        .from(_table)
-        .delete()
-        .eq('id', id)
-        .eq('business_id', businessId);
-  }
-
-  Future<void> updateStatus(String id, String status) async {
-    final businessId = await _getBusinessId();
-    
-    await _client
-        .from(_table)
-        .update({'status': status})
-        .eq('id', id)
-        .eq('business_id', businessId);
-  }
-
-  Future<String?> uploadImage(File file, String fileName) async {
+  // 1. Récupérer toutes les factures (Filtrées par Business ID)
+  Future<List<InvoiceModel>> getInvoices(String businessId) async {
     try {
-      final businessId = await _getBusinessId();
-      final path = '$businessId/invoices/$fileName';
+      print('🔍 REPOSITORY - Tentative de lecture pour le businessId: "$businessId"');
+
+      // 🟢 On a retiré le blocage du "userId == null" qui arrêtait tout !
+      final response = await _supabase
+          .from('invoices')
+          .select()
+          .eq('business_id', businessId) 
+          .order('created_at', ascending: false);
+          
+      print('📊 REPOSITORY - Nombre de factures récupérées depuis Supabase: ${response.length}');
       
-      await _client.storage
-          .from('factures')
-          .upload(path, file, fileOptions: const FileOptions(upsert: true));
-      
-      return _client.storage.from('factures').getPublicUrl(path);
+      return (response as List)
+          .map((json) => InvoiceModel.fromJson(json))
+          .toList();
     } catch (e) {
-      print('Erreur upload image: $e');
-      return null;
+      print('❌ REPOSITORY - Erreur lors de la récupération : $e');
+      throw Exception('Erreur lors de la récupération des factures : $e');
+    }
+  }
+
+  // 2. Créer une facture
+  Future<void> createInvoice(InvoiceModel invoice) async {
+    try {
+      final json = invoice.toJson();
+      // On retire l'ID pour laisser Supabase le générer automatiquement
+      json.remove('id'); 
+      
+      await _supabase.from('invoices').insert(json);
+    } catch (e) {
+      throw Exception('Erreur lors de la création de la facture : $e');
+    }
+  }
+
+  // 3. Modifier une facture
+  Future<void> updateInvoice(InvoiceModel invoice) async {
+    try {
+      await _supabase
+          .from('invoices')
+          .update(invoice.toJson())
+          .eq('id', invoice.id);
+    } catch (e) {
+      throw Exception('Erreur lors de la modification de la facture : $e');
+    }
+  }
+
+  // 4. Supprimer une facture
+  Future<void> deleteInvoice(String id) async {
+    try {
+      await _supabase.from('invoices').delete().eq('id', id);
+    } catch (e) {
+      throw Exception('Erreur lors de la suppression de la facture : $e');
+    }
+  }
+
+  // 5. Upload de l'image (dans un bucket nommé 'invoices')
+  Future<String> uploadImage(File file, String fileName) async {
+    try {
+      final storage = _supabase.storage.from('invoices');
+      
+      // Envoi du fichier
+      await storage.upload(fileName, file);
+      
+      // Récupération de l'URL publique
+      final publicUrl = storage.getPublicUrl(fileName);
+      return publicUrl;
+    } catch (e) {
+      throw Exception('Erreur lors de l\'upload de l\'image : $e');
     }
   }
 
   Future<void> deleteImage(String imageUrl) async {
     try {
-      final path = imageUrl.split('/factures/').last;
-      await _client.storage.from('factures').remove([path]);
+      final storage = _supabase.storage.from('invoices');
+      
+      // On extrait le nom du fichier depuis l'URL publique
+      final uri = Uri.parse(imageUrl);
+      final fileName = uri.pathSegments.last;
+      
+      await storage.remove([fileName]);
     } catch (e) {
-      print('Erreur suppression image: $e');
+      throw Exception('Erreur lors de la suppression de l\'image : $e');
     }
   }
 }
