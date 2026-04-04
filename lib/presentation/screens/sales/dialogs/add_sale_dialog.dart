@@ -5,30 +5,29 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/product_model.dart';
-import '../../../providers/sale_provider.dart';
-import '../../sales/widgets/product_selector.dart';
+import '../../../providers/sale_provider.dart'; // 🟢 Pointera vers ton sale provider
 import '../../../providers/product_provider.dart';
-
+import '../widgets/product_selector.dart';
 
 void showAddSaleDialog(BuildContext context) {
-  showDialog(context: context, builder: (ctx) => const _AddSaleDialog());
+  showDialog(context: context, builder: (ctx) => const AddSaleDialog());
 }
 
-class _AddSaleDialog extends ConsumerStatefulWidget {
-  const _AddSaleDialog();
+class AddSaleDialog extends ConsumerStatefulWidget {
+  const AddSaleDialog();
 
   @override
-  ConsumerState<_AddSaleDialog> createState() => _AddSaleDialogState();
+  ConsumerState<AddSaleDialog> createState() => _AddSaleDialogState();
 }
 
-class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
+class _AddSaleDialogState extends ConsumerState<AddSaleDialog> {
   final _quantityCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
-  final _customerCtrl = TextEditingController();
+  final _customerCtrl = TextEditingController(); // 🟢 Remplacé fournisseur par client
   ProductModel? _selectedProduct;
   DateTime _saleDate = DateTime.now();
   bool _paid = true;
-  String? _quantityError; // 🔥 NOUVEAU: erreur de validation quantité
+  String? _quantityError;
 
   @override
   void dispose() {
@@ -45,7 +44,7 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
     return AlertDialog(
       title: const Row(
         children: [
-          Icon(Icons.point_of_sale, color: Colors.green),
+          Icon(Icons.point_of_sale, color: Colors.green), // 🟢 VERT pour la vente
           SizedBox(width: 8),
           Text('Nouvelle vente'),
         ],
@@ -55,14 +54,13 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🔥 SÉLECTEUR DE PRODUIT AVEC STOCK
             productsAsync.when(
               data: (products) {
                 if (products.isEmpty) {
                   return Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.red.shade50,
+                      color: Colors.red[50],
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.red.shade200),
                     ),
@@ -72,7 +70,7 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Aucun produit disponible. Veuillez d\'abord ajouter des produits.',
+                            'Aucun produit disponible. Ajoutez d\'abord des produits.',
                             style: TextStyle(color: Colors.red),
                           ),
                         ),
@@ -83,12 +81,12 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
                 return ProductSelector(
                   products: products,
                   selectedProduct: _selectedProduct,
-                  allowOutOfStock: false, // 🔥 Interdit pour les ventes
+                  allowOutOfStock: false, // 🟢 Bloque la sélection si 0 stock en rayons !
                   onChanged: (ProductModel? p) {
                     setState(() {
                       _selectedProduct = p;
-                      _quantityError = null; // 🔥 Reset erreur quand changement
-                      print('Produit sélectionné: ${p?.name} | Stock: ${p?.currentStock}');
+                      _quantityError = null;
+                      _quantityCtrl.clear(); // Clear pour forcer le recalcul
                     });
                   },
                 );
@@ -105,7 +103,7 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
               error: (err, stack) => Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: Colors.red[50],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -114,11 +112,11 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
                     const SizedBox(height: 8),
                     Text(
                       'Erreur de chargement',
-                      style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.bold),
                     ),
                     Text(
                       '$err',
-                      style: TextStyle(color: Colors.red.shade600, fontSize: 12),
+                      style: TextStyle(color: Colors.red[600], fontSize: 12),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -128,7 +126,6 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
 
             const SizedBox(height: 16),
 
-            // 🔥 AFFICHAGE DU STOCK SÉLECTIONNÉ
             if (_selectedProduct != null)
               Container(
                 padding: const EdgeInsets.all(12),
@@ -155,14 +152,15 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
                               color: _selectedProduct!.stockColor,
                             ),
                           ),
-                          if (_selectedProduct!.isLowStock)
-                            Text(
-                              '⚠️ Stock bas (seuil: ${_selectedProduct!.lowStockThreshold})',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange.shade700,
-                              ),
+                          Text(
+                            'Après vente: ${_selectedProduct!.currentStock - (int.tryParse(_quantityCtrl.text) ?? 0)} unités',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: (_selectedProduct!.currentStock - (int.tryParse(_quantityCtrl.text) ?? 0)) >= 0 
+                                  ? Colors.green[700] 
+                                  : Colors.red[700],
                             ),
+                          ),
                         ],
                       ),
                     ),
@@ -172,62 +170,35 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
 
             const SizedBox(height: 16),
 
-            // 🔥 QUANTITÉ AVEC VALIDATION VISUELLE
             TextField(
               controller: _quantityCtrl,
               decoration: InputDecoration(
                 labelText: 'Quantité *',
-                hintText: _selectedProduct != null 
-                    ? 'Max: ${_selectedProduct!.currentStock}' 
-                    : 'Entrez la quantité',
+                hintText: 'Nombre d\'unités à vendre',
                 border: const OutlineInputBorder(),
-                errorText: _quantityError, // 🔥 Affiche l'erreur
+                errorText: _quantityError,
                 prefixIcon: const Icon(Icons.format_list_numbered),
-                suffixIcon: _selectedProduct != null
-                    ? Container(
-                        margin: const EdgeInsets.all(8),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'Max: ${_selectedProduct!.currentStock}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      )
-                    : null,
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               onChanged: (value) {
-                // 🔥 VALIDATION EN TEMPS RÉEL
-                if (_selectedProduct != null && value.isNotEmpty) {
+                if (value.isNotEmpty && _selectedProduct != null) {
                   final qty = int.tryParse(value) ?? 0;
-                  if (qty > _selectedProduct!.currentStock) {
-                    setState(() {
-                      _quantityError = 'Stock insuffisant! Max: ${_selectedProduct!.currentStock}';
-                    });
-                  } else if (qty <= 0) {
-                    setState(() {
-                      _quantityError = 'Quantité doit être > 0';
-                    });
+                  if (qty <= 0) {
+                    setState(() => _quantityError = 'Quantité doit être > 0');
+                  } else if (qty > _selectedProduct!.currentStock) {
+                    setState(() => _quantityError = 'Stock insuffisant (${_selectedProduct!.currentStock} max)');
                   } else {
-                    setState(() {
-                      _quantityError = null;
-                    });
+                    setState(() => _quantityError = null);
                   }
+                } else {
+                  setState(() => _quantityError = null);
                 }
               },
             ),
 
             const SizedBox(height: 16),
 
-            // MONTANT
             TextField(
               controller: _amountCtrl,
               decoration: const InputDecoration(
@@ -244,20 +215,18 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
 
             const SizedBox(height: 16),
 
-            // CLIENT
             TextField(
               controller: _customerCtrl,
               decoration: const InputDecoration(
                 labelText: 'Client (optionnel)',
                 hintText: 'Nom du client',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person_outline),
+                prefixIcon: Icon(Icons.person),
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // DATE
             OutlinedButton.icon(
               onPressed: _pickDate,
               icon: const Icon(Icons.calendar_today),
@@ -271,11 +240,10 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
 
             const SizedBox(height: 8),
 
-            // PAIEMENT
             SwitchListTile(
               title: const Text('Payé (comptant)'),
               subtitle: Text(
-                _paid ? 'Paiement immédiat' : 'Paiement différé',
+                _paid ? 'Paiement immédiat' : 'Vente à crédit',
                 style: TextStyle(
                   fontSize: 12,
                   color: _paid ? Colors.green : Colors.orange,
@@ -298,19 +266,18 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
           label: const Text('Annuler'),
         ),
         ElevatedButton.icon(
-          onPressed: _quantityError != null || _selectedProduct == null 
-              ? null  // 🔥 Désactivé si erreur ou pas de produit
+          onPressed: _quantityError != null || _selectedProduct == null
+              ? null
               : _submit,
           icon: const Icon(Icons.save),
           label: const Text('Enregistrer'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
+            backgroundColor: Colors.green, // 🟢 VERT pour la vente
             foregroundColor: Colors.white,
-            disabledBackgroundColor: Colors.grey.shade300,
+            disabledBackgroundColor: Colors.grey[300],
           ),
         ),
-      ],
-    );
+      ]);
   }
 
   Future<void> _pickDate() async {
@@ -318,12 +285,12 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
       context: context,
       initialDate: _saleDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      lastDate: DateTime.now(),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Colors.green,
+            colorScheme: ColorScheme.light(
+              primary: Colors.green.shade700, // 🟢 VERT
             ),
           ),
           child: child!,
@@ -334,7 +301,6 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
   }
 
   Future<void> _submit() async {
-    // 🔥 VALIDATIONS FINALES
     if (_selectedProduct == null) {
       _showError('Veuillez sélectionner un produit');
       return;
@@ -353,57 +319,17 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
       return;
     }
 
-    // 🔥 VÉRIFICATION STOCK (double sécurité)
-    if (quantity > _selectedProduct!.currentStock) {
-      _showError(
-        'Stock insuffisant!\n'
-        'Disponible: ${_selectedProduct!.currentStock}\n'
-        'Demandé: $quantity',
-      );
-      return;
-    }
-
-    // 🔥 CONFIRMATION SI STOCK BAS APRÈS VENTE
-    final remainingStock = _selectedProduct!.currentStock - quantity;
-    if (remainingStock <= 0) {
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('Confirmation'),
-            ],
-          ),
-          content: Text(
-            'Cette vente videra complètement le stock de ${_selectedProduct!.name}.\n\n'
-            'Stock après vente: 0 unité(s)\n\n'
-            'Êtes-vous sûr de vouloir continuer ?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              child: const Text('Confirmer'),
-            ),
-          ],
-        ),
-      );
-      if (confirm != true) return;
-    }
-
     try {
+      // 🌐 APPEL DU PROVIDER DES VENTES
       await ref.read(saleNotifierProvider.notifier).createSale(
         productId: _selectedProduct!.id,
         quantity: quantity,
         amount: amount,
-        clientId: _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
+        clientId: _customerCtrl.text.trim().isEmpty
+            ? null
+            : _customerCtrl.text.trim(),
         saleDate: _saleDate,
+        isPaid: _paid,
       );
 
       ref.invalidate(salesProvider);
@@ -414,8 +340,7 @@ class _AddSaleDialogState extends ConsumerState<_AddSaleDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ Vente enregistrée: $quantity x ${_selectedProduct!.name}'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green, // 🟢 VERT
           ),
         );
       }

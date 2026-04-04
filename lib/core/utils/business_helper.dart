@@ -8,25 +8,20 @@ final businessHelperProvider = Provider<BusinessHelper>((ref) {
 
 class BusinessHelper {
   final Ref _ref;
-  String? _cachedBusinessId;
 
   BusinessHelper(this._ref);
 
   Future<String> getBusinessId() async {
-    if (_cachedBusinessId != null) return _cachedBusinessId!;
-
     final authState = _ref.read(authProvider);
     final businessId = authState.businessId;
 
-    print('🔍 BusinessHelper - AuthState businessId: $businessId');
+    print('🔍 BusinessHelper - businessId depuis authProvider: $businessId');
+    print('🔍 BusinessHelper - currentUser: ${authState.currentUser?.id}');
 
     if (businessId == null || businessId.isEmpty) {
-      throw Exception('User sans business_id dans AuthProvider');
+      throw Exception('Pas de business_id - utilisateur non connecté');
     }
 
-    _cachedBusinessId = businessId;
     return businessId;
   }
-
-  void clearCache() => _cachedBusinessId = null;
 }

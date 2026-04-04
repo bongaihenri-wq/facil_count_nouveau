@@ -10,17 +10,17 @@ import '../../../providers/product_provider.dart';
 import '../../sales/widgets/product_selector.dart';
 
 void showAddPurchaseDialog(BuildContext context) {
-  showDialog(context: context, builder: (ctx) => const _AddPurchaseDialog());
+  showDialog(context: context, builder: (ctx) => const AddPurchaseDialog());
 }
 
-class _AddPurchaseDialog extends ConsumerStatefulWidget {
-  const _AddPurchaseDialog();
+class AddPurchaseDialog extends ConsumerStatefulWidget {
+  const AddPurchaseDialog();
 
   @override
-  ConsumerState<_AddPurchaseDialog> createState() => _AddPurchaseDialogState();
+  ConsumerState<AddPurchaseDialog> createState() => _AddPurchaseDialogState();
 }
 
-class _AddPurchaseDialogState extends ConsumerState<_AddPurchaseDialog> {
+class _AddPurchaseDialogState extends ConsumerState<AddPurchaseDialog> {
   final _quantityCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _supplierCtrl = TextEditingController();

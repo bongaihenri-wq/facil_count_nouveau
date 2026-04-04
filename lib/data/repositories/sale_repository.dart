@@ -1,57 +1,111 @@
+import 'package:uuid/uuid.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/sale_model.dart';
 import '../../core/utils/business_helper.dart';
+import '../../presentation/providers/product_provider.dart';
 
 class SaleRepository {
   final SupabaseClient _client;
   final BusinessHelper _businessHelper;
+  final Ref _ref;
 
-  SaleRepository(this._client, this._businessHelper);
+  SaleRepository(this._client, this._businessHelper, this._ref);
 
+  /// 🌐 EN LIGNE : Récupère toutes les ventes directement depuis Supabase
   Future<List<SaleModel>> getSales() async {
     final businessId = await _businessHelper.getBusinessId();
-    final data = await _client
-        .from('sales')
-        .select('*, products(name), clients(name), business_id')
-        .eq('business_id', businessId)
-        .order('sale_date', ascending: false);
+    
+    if (businessId.isEmpty) {
+      print('❌ ERREUR: business_id est vide !');
+      return [];
+    }
 
-    return (data as List<dynamic>)
-        .map((json) => SaleModel.fromJson(json as Map<String, dynamic>))
-        .toList();
+    try {
+      print('🌐 Supabase - Récupération des ventes en direct...');
+      final response = await _client
+          .from('sales')
+          .select('*, products(name), clients(name)')
+          .eq('business_id', businessId)
+          .order('sale_date', ascending: false);
+
+      final List<dynamic> data = response as List<dynamic>;
+      
+      return data.map((json) {
+        final Map<String, dynamic> saleMap = Map<String, dynamic>.from(json);
+        if (saleMap['products'] != null) {
+          saleMap['product_name'] = saleMap['products']['name'];
+        }
+        return SaleModel.fromJson(saleMap);
+      }).toList();
+      
+    } catch (e) {
+      print('❌ Erreur getSales() Supabase: $e');
+      return [];
+    }
   }
 
+ /// 🌐 EN LIGNE : Crée une vente directement sur Supabase
   Future<SaleModel> createSale({
     required String productId,
     required int quantity,
     required double amount,
     String? clientId,
     required DateTime saleDate,
-    bool paid = true,
+    bool isPaid = true, 
   }) async {
     final businessId = await _businessHelper.getBusinessId();
 
-    final data = await _client
-        .from('sales')
-        .insert({
-          'product_id': productId,
-          'quantity': quantity,
-          'amount': amount,
-          'client_id': clientId,
-          'sale_date': saleDate.toIso8601String(),
-          'paid': paid,
-          'business_id': businessId,
-        })
-        .select('*, products(name), clients(name)')
-        .single();
+    try {
+      print('🌐 Supabase - Envoi direct de la vente...');
+      
+      final payload = {
+        'id': const Uuid().v4(),
+        'business_id': businessId,
+        'product_id': productId,
+        'quantity': quantity,
+        'amount': amount,
+        'client_id': clientId,
+        'sale_date': saleDate.toIso8601String(),
+        'created_at': DateTime.now().toIso8601String(),
+        'paid': isPaid,
+        'locked': false,
+      };
 
-    // Diminuer le stock (vente)
-    await _updateProductStock(productId, -quantity, businessId);
+      print('📦 Tentative d\'envoi du payload: $payload');
 
-    return SaleModel.fromJson(data as Map<String, dynamic>);
+      final data = await _client
+          .from('sales')
+          .insert(payload)
+          .select('*, products(name)') 
+          .single(); 
+
+      print('✅ Vente enregistrée avec succès dans Supabase !');
+
+      final Map<String, dynamic> responseMap = Map<String, dynamic>.from(data);
+      if (responseMap['products'] != null) {
+        responseMap['product_name'] = responseMap['products']['name'];
+      }
+
+      print('✅ Vente enregistrée avec succès sur Supabase !');
+
+      // 🔥 AJOUT ICI : Rafraîchir l'écran
+      // On demande à Riverpod de recalculer/recharger la liste des produits et des stocks
+      // Remplace 'productsProvider' par le nom exact du provider que tu utilises pour lister tes produits !
+      _ref.invalidate(productsProvider); 
+      
+      // Si tu as aussi un provider pour la liste des ventes, tu peux l'invalider ici :
+      // _ref.invalidate(salesProvider);
+
+      return SaleModel.fromJson(responseMap);
+      
+    } catch (e) {
+      print('❌ ERREUR CRÉATION VENTE SUPABASE: $e');
+      throw Exception('Échec création vente: $e');
+    }
   }
 
+  /// 🌐 EN LIGNE : Modifie une vente
   Future<SaleModel> updateSale({
     required String id,
     required String productId,
@@ -59,51 +113,77 @@ class SaleRepository {
     required double amount,
     String? clientId,
     required DateTime saleDate,
-    required bool paid,
+    required bool isPaid,
     required bool locked,
   }) async {
     final businessId = await _businessHelper.getBusinessId();
 
-    final oldSale = await _client
-        .from('sales')
-        .select('quantity')
-        .eq('id', id)
-        .single();
+    try {
+      final data = await _client
+          .from('sales')
+          .update({
+            'product_id': productId,
+            'quantity': quantity,
+            'amount': amount,
+            'client_id': clientId,
+            'sale_date': saleDate.toIso8601String(),
+            'paid': isPaid,
+            'locked': locked,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id)
+          .eq('business_id', businessId)
+          .select('*, products(name)')
+          .single();
 
-    final oldQuantity = (oldSale['quantity'] as num).toInt();
-    final quantityDiff = quantity - oldQuantity;
+      // 🛑 SUPPRESSION DU DOUBLON : Supabase gère déjà la différence de stock lors d'un update.
+      /*
+      final oldSale = await _client
+          .from('sales')
+          .select('quantity')
+          .eq('id', id)
+          .single();
+      final oldQuantity = (oldSale['quantity'] as num).toInt();
+      final quantityDiff = quantity - oldQuantity;
+      if (quantityDiff != 0) {
+        await _updateProductStock(productId, -quantityDiff, businessId);
+      }
+      */
 
-    final data = await _client
-        .from('sales')
-        .update({
-          'product_id': productId,
-          'quantity': quantity,
-          'amount': amount,
-          'client_id': clientId,
-          'sale_date': saleDate.toIso8601String(),
-          'paid': paid,
-          'locked': locked,
-        })
-        .eq('id', id)
-        .select('*, products(name), clients(name)')
-        .single();
+      final Map<String, dynamic> responseMap = Map<String, dynamic>.from(data);
+      if (responseMap['products'] != null) {
+        responseMap['product_name'] = responseMap['products']['name'];
+      }
 
-    if (quantityDiff != 0) {
-      await _updateProductStock(productId, -quantityDiff, businessId);
+      return SaleModel.fromJson(responseMap);
+    } catch (e) {
+      print('❌ ERREUR UPDATE VENTE: $e');
+      throw Exception('Échec modification vente: $e');
     }
-
-    return SaleModel.fromJson(data as Map<String, dynamic>);
   }
 
+  /// 🌐 EN LIGNE : Supprime une vente
   Future<void> deleteSale(String id, String productId, int quantity) async {
     final businessId = await _businessHelper.getBusinessId();
 
-    await _client.from('sales').delete().eq('id', id);
+    try {
+      await _client
+          .from('sales')
+          .delete()
+          .eq('id', id)
+          .eq('business_id', businessId);
 
-    // Réaugmenter le stock (suppression de vente)
-    await _updateProductStock(productId, quantity, businessId);
+      // 🛑 SUPPRESSION DU DOUBLON : Supabase recrédite déjà le stock lors d'un delete.
+      // await _updateProductStock(productId, quantity, businessId);
+      
+    } catch (e) {
+      print('❌ ERREUR DELETE VENTE: $e');
+      throw Exception('Échec suppression vente: $e');
+    }
   }
 
+  /// 🔄 Méthode conservée au cas où tu en aies besoin ailleurs,
+  /// mais elle n'est plus appelée lors des flux de ventes classiques.
   Future<void> _updateProductStock(String productId, int quantityDelta, String businessId) async {
     final product = await _client
         .from('products')
@@ -114,6 +194,10 @@ class SaleRepository {
 
     final currentStock = (product['initial_stock'] as num).toInt();
     final newStock = currentStock + quantityDelta;
+
+    if (newStock < 0) {
+      throw Exception('Opération impossible : le stock deviendrait négatif ($newStock).');
+    }
 
     await _client
         .from('products')

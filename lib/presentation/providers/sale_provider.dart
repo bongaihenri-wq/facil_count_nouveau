@@ -1,24 +1,23 @@
+// lib/presentation/providers/sale_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../data/models/sale_model.dart';
-import '../../data/repositories/sale_repository.dart';
+import '../../data/models/sale_model.dart'; // 🟢 Pointera vers ton modèle de vente
+import '../../data/repositories/sale_repository.dart'; // 🟢 Pointera vers ton repository de vente
 import '../../core/utils/business_helper.dart';
-
 
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {
   final client = Supabase.instance.client;
   final businessHelper = ref.watch(businessHelperProvider);
-  return SaleRepository(client, businessHelper);
+  return SaleRepository(client, businessHelper, ref);
 });
 
-// ... reste du fichier inchangé
-// Sales list - AsyncValue
+// Sales list
 final salesProvider = FutureProvider<List<SaleModel>>((ref) async {
   final repo = ref.watch(saleRepositoryProvider);
   return repo.getSales();
 });
 
-// Sale actions
+// Actions
 class SaleNotifier extends StateNotifier<AsyncValue<void>> {
   final SaleRepository _repo;
 
@@ -28,8 +27,9 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
     required String productId,
     required int quantity,
     required double amount,
-    String? clientId,
+    String? clientId, // 🟢 Adapté de supplier -> clientId
     required DateTime saleDate,
+    bool isPaid = true, // 🟢 Nommé isPaid pour correspondre à ton add_sale_dialog.dart
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -39,6 +39,7 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
         amount: amount,
         clientId: clientId,
         saleDate: saleDate,
+        isPaid: isPaid,
       );
       state = const AsyncValue.data(null);
     } catch (e, st) {
@@ -53,7 +54,7 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
     required double amount,
     String? clientId,
     required DateTime saleDate,
-    required bool paid,
+    required bool isPaid,
     required bool locked,
   }) async {
     state = const AsyncValue.loading();
@@ -65,7 +66,7 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
         amount: amount,
         clientId: clientId,
         saleDate: saleDate,
-        paid: paid,
+        isPaid: isPaid,
         locked: locked,
       );
       state = const AsyncValue.data(null);
@@ -77,7 +78,11 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> deleteSale(SaleModel sale) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.deleteSale(sale.id, sale.productId, sale.quantity);
+      await _repo.deleteSale(
+        sale.id,
+        sale.productId,
+        sale.quantity,
+      );
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -85,46 +90,49 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
   }
 }
 
+final saleNotifierProvider =
+    StateNotifierProvider<SaleNotifier, AsyncValue<void>>((ref) {
+      return SaleNotifier(ref.watch(saleRepositoryProvider));
+    });
+
 // Filtres
 class SaleFilters {
   final String? productId;
   final DateTime? startDate;
   final DateTime? endDate;
+  final String? clientId; // 🟢 Adapté de supplier -> clientId
+  final String? period;
   final int? minQuantity;
   final int? maxQuantity;
-  final String? period;  // ← AJOUTÉ
+
 
   const SaleFilters({
     this.productId,
     this.startDate,
     this.endDate,
-    this.minQuantity,
-    this.maxQuantity,
-    this.period,  // ← AJOUTÉ
+    this.clientId,
+    this.period, this.minQuantity, this.maxQuantity,
   });
 
   bool get isActive =>
       productId != null ||
       startDate != null ||
       endDate != null ||
-      minQuantity != null ||
-      maxQuantity != null ||
-      period != null;  // ← AJOUTÉ
+      clientId != null ||
+      period != null;
 
   SaleFilters copyWith({
     String? productId,
     DateTime? startDate,
     DateTime? endDate,
-    int? minQuantity,
-    int? maxQuantity,
-    String? period,  // ← AJOUTÉ
+    String? clientId,
+    String? period, int? minQuantity, int? maxQuantity,
   }) => SaleFilters(
     productId: productId ?? this.productId,
     startDate: startDate ?? this.startDate,
     endDate: endDate ?? this.endDate,
-    minQuantity: minQuantity ?? this.minQuantity,
-    maxQuantity: maxQuantity ?? this.maxQuantity,
-    period: period ?? this.period,  // ← AJOUTÉ
+    clientId: clientId ?? this.clientId,
+    period: period ?? this.period,
   );
 }
 
@@ -135,13 +143,13 @@ class SaleFiltersNotifier extends StateNotifier<SaleFilters> {
     String? productId,
     DateTime? startDate,
     DateTime? endDate,
-    int? minQuantity,
-    int? maxQuantity,
+    String? clientId, int? minQuantity, int? maxQuantity,
   }) {
     state = state.copyWith(
       productId: productId,
       startDate: startDate,
       endDate: endDate,
+      clientId: clientId,
       minQuantity: minQuantity,
       maxQuantity: maxQuantity,
     );
@@ -155,12 +163,12 @@ final saleFiltersProvider =
       return SaleFiltersNotifier();
     });
 
-// ⭐ GARDÉ COMME PROVIDER SIMPLE - Liste directe, pas AsyncValue
+// Filtre dynamique des ventes
 final filteredSalesProvider = Provider<List<SaleModel>>((ref) {
   final allSales = ref.watch(salesProvider).valueOrNull ?? [];
   final filters = ref.watch(saleFiltersProvider);
 
-  print('Filtres actifs: ${filters.isActive}');
+  print('Filtres Ventes actifs: ${filters.isActive}');
 
   return allSales.where((sale) {
     if (filters.productId != null && sale.productId != filters.productId) {
@@ -170,23 +178,20 @@ final filteredSalesProvider = Provider<List<SaleModel>>((ref) {
         sale.saleDate.isBefore(filters.startDate!)) {
       return false;
     }
-    if (filters.endDate != null && sale.saleDate.isAfter(filters.endDate!)) {
+    if (filters.endDate != null &&
+        sale.saleDate.isAfter(filters.endDate!)) {
       return false;
     }
-    if (filters.minQuantity != null && sale.quantity < filters.minQuantity!) {
-      return false;
-    }
-    if (filters.maxQuantity != null && sale.quantity > filters.maxQuantity!) {
+    if (filters.clientId != null &&
+        !(sale.clientId?.toLowerCase().contains(
+              filters.clientId!.toLowerCase(),
+            ) ??
+            false)) {
       return false;
     }
     return true;
   }).toList();
 });
 
-final saleNotifierProvider =
-    StateNotifierProvider<SaleNotifier, AsyncValue<void>>((ref) {
-      return SaleNotifier(ref.watch(saleRepositoryProvider));
-    });
-
-// Tab state
+// Tab state pour les ventes
 final saleTabProvider = StateProvider<int>((ref) => 0);

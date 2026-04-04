@@ -54,6 +54,17 @@ dependencies:
   photo_view: ^0.14.0      # Pour le zoom image
   image_picker: ^1.0.7      # Pour prendre des photos
   path_provider: ^2.1.2     # Pour les chemins de fichiers 
+# Drift (SQLite)
+  drift: ^2.14.0
+  drift_flutter: ^0.1.0
+  sqlite3_flutter_libs: ^0.5.0
+  uuid: ^4.4.0
+  dbcrypt: ^2.0.0
+
+  # Connexion
+  connectivity_plus: ^5.0.2
+
+
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +80,10 @@ dev_dependencies:
   build_runner: ^2.13.1
   freezed: ^3.2.5
   json_serializable: ^6.13.1
+
+  # Génération code Drift
+  drift_dev: ^2.14.0
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

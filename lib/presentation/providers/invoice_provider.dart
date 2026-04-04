@@ -1,142 +1,112 @@
-import 'package:flutter/material.dart'; // ← AJOUTÉ pour DateTimeRange
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../data/models/invoice_model.dart';
-import '../../../data/repositories/invoice_repository.dart';
-import '../../../core/utils/business_helper.dart';
+import '../../data/models/invoice_model.dart';
+import '../../data/repositories/invoice_repository.dart';
+import '../../core/utils/business_helper.dart'; // Vérifie bien ce chemin !
 
-// Repository provider
+// 🟡 Fournit l'instance du Repository
 final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
-  final client = Supabase.instance.client;
-  final businessHelper = ref.watch(businessHelperProvider);
-  return InvoiceRepository(client, businessHelper);
+  return InvoiceRepository();
 });
 
-// ✅ SUPPRIMÉ : Le StreamProvider en double (garder uniquement FutureProvider)
-// Liste des factures (FutureProvider simple et fiable)
-final invoicesProvider = FutureProvider<List<InvoiceModel>>((ref) async {
+// 🟡 Récupère la liste brute des factures depuis Supabase
+final invoicesFutureProvider = FutureProvider<List<InvoiceModel>>((ref) async {
   final repo = ref.watch(invoiceRepositoryProvider);
-  return repo.getInvoices();
+  
+  // On récupère le businessId via le helper
+  final businessHelper = ref.read(businessHelperProvider);
+  final businessId = await businessHelper.getBusinessId();
+  
+  // On passe l'ID attendu par getInvoices
+  return repo.getInvoices(businessId);
 });
 
-// Filtre par type
-final invoiceTypeFilterProvider = StateProvider<String>((ref) => 'Tous');
-
-// Filtre par statut
+// 🟡 Filtres d'états
 final invoiceStatusFilterProvider = StateProvider<String?>((ref) => null);
+final invoiceTypeFilterProvider = StateProvider<String?>((ref) => null);
 
-// ✅ CORRIGÉ : DateTimeRange vient de material.dart
-final invoicePeriodFilterProvider = StateProvider<DateTimeRange?>((ref) => null);
-
-// Factures filtrées
+// 🟡 Filtrage combiné des factures
 final filteredInvoicesProvider = Provider<AsyncValue<List<InvoiceModel>>>((ref) {
-  final invoicesAsync = ref.watch(invoicesProvider);
-  final typeFilter = ref.watch(invoiceTypeFilterProvider);
+  final invoicesAsync = ref.watch(invoicesFutureProvider);
   final statusFilter = ref.watch(invoiceStatusFilterProvider);
-  final periodFilter = ref.watch(invoicePeriodFilterProvider);
+  final typeFilter = ref.watch(invoiceTypeFilterProvider);
 
-  return invoicesAsync.when(
+  return invoicesAsync.whenData((invoices) {
+    return invoices.where((invoice) {
+      final matchesStatus = statusFilter == null || 
+                            statusFilter == 'Tous' || 
+                            invoice.status == statusFilter;
+                            
+      final matchesType = typeFilter == null || 
+                          typeFilter == 'Tous' || 
+                          invoice.type == typeFilter;
+                          
+      return matchesStatus && matchesType;
+    }).toList();
+  });
+});
+
+// 🟡 Calculateur de statistiques rapides
+final invoiceStatsProvider = Provider<Map<String, dynamic>>((ref) {
+  final invoicesAsync = ref.watch(filteredInvoicesProvider);
+  
+  return invoicesAsync.maybeWhen(
     data: (invoices) {
-      var filtered = invoices;
-
-      // Filtre par type
-      if (typeFilter != 'Tous') {
-        filtered = filtered.where((i) => i.type == typeFilter).toList();
-      }
-
-      // Filtre par statut
-      if (statusFilter != null) {
-        filtered = filtered.where((i) => i.status == statusFilter).toList();
-      }
-
-      // Filtre par période
-      if (periodFilter != null) {
-        filtered = filtered.where((i) {
-          return i.invoiceDate.isAfter(periodFilter.start.subtract(const Duration(days: 1))) &&
-                 i.invoiceDate.isBefore(periodFilter.end.add(const Duration(days: 1)));
-        }).toList();
-      }
-
-      // Trier par date décroissante
-      filtered.sort((a, b) => b.invoiceDate.compareTo(a.invoiceDate));
-
-      return AsyncValue.data(filtered);
+      final total = invoices.fold<double>(0.0, (sum, item) => sum + item.amount);
+      final payees = invoices.where((inv) => inv.status == 'Payée').length;
+      
+      return {
+        'count': invoices.length,
+        'total': total,
+        'payees': payees,
+      };
     },
-    loading: () => const AsyncValue.loading(),
-    error: (err, stack) => AsyncValue.error(err, stack),
+    orElse: () => {'count': 0, 'total': 0.0, 'payees': 0},
   );
 });
 
-// Notifier pour les actions (CRUD)
+// 🟡 Le Notifier pour les actions d'écriture
 class InvoiceNotifier extends StateNotifier<AsyncValue<void>> {
-  final InvoiceRepository _repo;
+  final InvoiceRepository _repository;
+  final Ref _ref;
 
-  InvoiceNotifier(this._repo) : super(const AsyncValue.data(null));
+  InvoiceNotifier(this._repository, this._ref) : super(const AsyncValue.data(null));
 
   Future<void> createInvoice(InvoiceModel invoice) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.createInvoice(invoice);
+      await _repository.createInvoice(invoice);
       state = const AsyncValue.data(null);
+      _ref.invalidate(invoicesFutureProvider); 
     } catch (e, st) {
       state = AsyncValue.error(e, st);
-      rethrow;
     }
   }
 
   Future<void> updateInvoice(InvoiceModel invoice) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.updateInvoice(invoice);
+      await _repository.updateInvoice(invoice);
       state = const AsyncValue.data(null);
+      _ref.invalidate(invoicesFutureProvider);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
-      rethrow;
     }
   }
 
   Future<void> deleteInvoice(String id) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.deleteInvoice(id);
+      await _repository.deleteInvoice(id);
       state = const AsyncValue.data(null);
+      _ref.invalidate(invoicesFutureProvider);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
-      rethrow;
-    }
-  }
-
-  Future<void> updateStatus(String id, String status) async {
-    state = const AsyncValue.loading();
-    try {
-      await _repo.updateStatus(id, status);
-      state = const AsyncValue.data(null);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-      rethrow;
     }
   }
 }
 
-final invoiceNotifierProvider =
-    StateNotifierProvider<InvoiceNotifier, AsyncValue<void>>((ref) {
-  return InvoiceNotifier(ref.watch(invoiceRepositoryProvider));
-});
-
-// Stats des factures
-final invoiceStatsProvider = Provider<Map<String, dynamic>>((ref) {
-  final invoices = ref.watch(filteredInvoicesProvider).valueOrNull ?? [];
-
-  final total = invoices.fold(0.0, (sum, i) => sum + i.amount);
-  final payees = invoices.where((i) => i.status == 'Payée').length;
-  final enAttente = invoices.where((i) => i.status == 'En attente').length;
-  final annulees = invoices.where((i) => i.status == 'Annulée').length;
-
-  return {
-    'count': invoices.length,
-    'total': total,
-    'payees': payees,
-    'enAttente': enAttente,
-    'annulees': annulees,
-  };
+// 🟡 Fournit le Notifier à l'interface graphique
+final invoiceNotifierProvider = StateNotifierProvider<InvoiceNotifier, AsyncValue<void>>((ref) {
+  final repo = ref.watch(invoiceRepositoryProvider);
+  return InvoiceNotifier(repo, ref);
 });

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/app_drawer.dart';
+import '../products/product_screen.dart';
+import '../purchases/purchase_screen.dart';
+import '../sales/sale_screen.dart';
 
 class UserDashboardScreen extends ConsumerWidget {
   const UserDashboardScreen({super.key});
@@ -88,38 +91,62 @@ class UserDashboardScreen extends ConsumerWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
+                // 🟢 Étape 1 : On donne plus de hauteur aux cartes pour éviter l'overflow
+                childAspectRatio: 0.9, 
                 children: [
                   _buildFeatureCard(
                     icon: Icons.inventory,
                     title: 'Produits',
                     subtitle: 'Voir le stock',
                     color: Colors.blue,
-                    onTap: () {},
+                    // 🟢 Étape 2 : Lien vers l'écran Product screen
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ProductScreen()),
+                      );
+                    },
                   ),
                   _buildFeatureCard(
                     icon: Icons.shopping_cart,
                     title: 'Achats',
                     subtitle: 'Historique',
                     color: Colors.green,
-                    onTap: () {},
+                    // 🟢 Étape 3 : Lien vers l'écran Purchase screen
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PurchaseScreen()),
+                      );
+                    },
                   ),
                   _buildFeatureCard(
                     icon: Icons.sell,
                     title: 'Ventes',
                     subtitle: 'Enregistrer',
                     color: Colors.orange,
-                    onTap: () {},
+                    // 🟢 Étape 4 : Lien vers l'écran Sales screen
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SaleScreen()),
+                      );
+                    },
                   ),
                   _buildFeatureCard(
                     icon: Icons.lock,
                     title: 'Verrouillés',
                     subtitle: 'Éléments bloqués',
                     color: Colors.red,
-                    onTap: () {},
+                    onTap: () {
+                      // Ton action si besoin
+                    },
                   ),
                 ],
               ),
             ),
+            
+            const SizedBox(height: 16),
             
             Container(
               padding: const EdgeInsets.all(16),
@@ -144,6 +171,9 @@ class UserDashboardScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            
+            // 🟢 Étape 5 : Un padding de 20px tout en bas de l'écran
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -164,31 +194,44 @@ class UserDashboardScreen extends ConsumerWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12), // 🟢 Réduit un peu le padding
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 32),
+                child: Icon(icon, color: color, size: 28), // 🟢 Taille ajustée
               ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+              const SizedBox(height: 8),
+              
+              // 🟢 Flexible et coupure auto du texte pour blinder contre l'overflow
+              Flexible(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 12,
+              const SizedBox(height: 4),
+              Flexible(
+                child: Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/purchase_model.dart';
 import '../../core/utils/business_helper.dart';
 
@@ -36,6 +37,7 @@ class PurchaseRepository {
     final data = await _client
         .from('purchases')
         .insert({
+          'id': Uuid().v4(),
           'product_id': productId,
           'quantity': quantity,
           'amount': amount,
@@ -47,8 +49,8 @@ class PurchaseRepository {
         .select('*, products(name)')
         .single();
 
-    // Mise à jour du stock
-    await _updateProductStock(productId, quantity, businessId);
+    // 🛑 SUPPRESSION DU DOUBLON : Le trigger Supabase s'en charge maintenant automatiquement
+    // await _updateProductStock(productId, quantity, businessId);
 
     return PurchaseModel.fromJson(data as Map<String, dynamic>);
   }
@@ -65,15 +67,6 @@ class PurchaseRepository {
   }) async {
     final businessId = await _businessHelper.getBusinessId();
 
-    final oldPurchase = await _client
-        .from('purchases')
-        .select('quantity')
-        .eq('id', id)
-        .single();
-
-    final oldQuantity = (oldPurchase['quantity'] as num).toInt();
-    final quantityDiff = quantity - oldQuantity;
-
     final data = await _client
         .from('purchases')
         .update({
@@ -89,9 +82,19 @@ class PurchaseRepository {
         .select('*, products(name)')
         .single();
 
+    // 🛑 SUPPRESSION DU DOUBLON : Supabase gère déjà la différence de stock lors d'un update
+    /*
+    final oldPurchase = await _client
+        .from('purchases')
+        .select('quantity')
+        .eq('id', id)
+        .single();
+    final oldQuantity = (oldPurchase['quantity'] as num).toInt();
+    final quantityDiff = quantity - oldQuantity;
     if (quantityDiff != 0) {
       await _updateProductStock(productId, quantityDiff, businessId);
     }
+    */
 
     return PurchaseModel.fromJson(data as Map<String, dynamic>);
   }
@@ -101,10 +104,12 @@ class PurchaseRepository {
 
     await _client.from('purchases').delete().eq('id', id);
 
-    // Diminuer le stock (suppression d'achat)
-    await _updateProductStock(productId, -quantity, businessId);
+    // 🛑 SUPPRESSION DU DOUBLON : Le trigger Supabase s'en charge aussi à la suppression
+    // await _updateProductStock(productId, -quantity, businessId);
   }
 
+  /// 🔄 Méthode conservée au cas où elle serve pour d'autres fonctionnalités, 
+  /// mais elle n'est plus appelée pour les achats.
   Future<void> _updateProductStock(String productId, int quantityDelta, String businessId) async {
     final product = await _client
         .from('products')

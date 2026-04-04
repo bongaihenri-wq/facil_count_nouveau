@@ -4,9 +4,8 @@ import '../../providers/sale_provider.dart';
 import '../../../data/models/sale_model.dart';
 import 'widgets/sale_list.dart';
 import 'widgets/sale_dashboard.dart';
-import 'dialogs/add_sale_dialog.dart';
+import '../sales/dialogs/add_sale_dialog.dart'; // 🔥 Ajuste l'import si ce fichier est dans un autre dossier
 import 'dialogs/filter_dialog.dart';
-import '../../../core/utils/formatters.dart';
 
 class SaleScreen extends ConsumerWidget {
   const SaleScreen({super.key});
@@ -44,7 +43,8 @@ class SaleScreen extends ConsumerWidget {
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => showAddSaleDialog(context),
+            // 🔥 MODIFIÉ : Utilisation directe de showDialog
+            onPressed: () => _openAddSaleDialog(context),
           ),
         ],
       ),
@@ -74,11 +74,20 @@ class SaleScreen extends ConsumerWidget {
         error: (err, _) => Center(child: Text('Erreur: $err')),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => showAddSaleDialog(context),
+        // 🔥 MODIFIÉ : Utilisation directe de showDialog ici aussi
+        onPressed: () => _openAddSaleDialog(context),
         backgroundColor: Colors.green.shade700,
         child: const Icon(Icons.add, color: Colors.white),
       ),
       bottomNavigationBar: _buildBottomNav(context),
+    );
+  }
+
+  // 🔥 NOUVELLE MÉTHODE : Centralise l'ouverture de la boîte de dialogue
+  void _openAddSaleDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const AddSaleDialog(),
     );
   }
 
@@ -112,7 +121,7 @@ class SaleScreen extends ConsumerWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 80),
+      padding: const EdgeInsets.only(bottom: 20),
       child: SaleDashboard(sales: sales),  // ⭐ Passe la liste directement
     );
   }
@@ -140,7 +149,7 @@ class SaleScreen extends ConsumerWidget {
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () {
-              ref.read(saleFiltersProvider.notifier).state = SaleFilters();
+              ref.read(saleFiltersProvider.notifier).state = const SaleFilters();
             },
             icon: const Icon(Icons.clear),
             label: const Text('Réinitialiser le filtre'),
