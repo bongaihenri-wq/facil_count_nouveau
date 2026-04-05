@@ -1,18 +1,17 @@
 // lib/presentation/providers/product_provider.dart
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/product_model.dart';
-import '../../data/repositories/product_repository.dart';
 import '../../core/utils/business_helper.dart';
 
-final productRepositoryProvider = Provider<ProductRepository>((ref) {
+// On importe notre repository local tout frais
+import '../../data/repositories/product_repository_local.dart';
+
+final productRepositoryProvider = Provider<ProductRepositoryLocal>((ref) {
   final client = Supabase.instance.client;
   final businessHelper = ref.watch(businessHelperProvider);
-  return ProductRepository(client, businessHelper);
+  return ProductRepositoryLocal(client, businessHelper);
 });
-
-// ... reste du fichier inchangé
 
 final productsProvider = FutureProvider<List<ProductModel>>((ref) async {
   final repo = ref.watch(productRepositoryProvider);
@@ -20,8 +19,7 @@ final productsProvider = FutureProvider<List<ProductModel>>((ref) async {
 });
 
 class ProductNotifier extends StateNotifier<AsyncValue<void>> {
-  final ProductRepository _repo;
-
+  final ProductRepositoryLocal _repo;
   ProductNotifier(this._repo) : super(const AsyncValue.data(null));
 
   Future<void> createProduct({
@@ -41,9 +39,7 @@ class ProductNotifier extends StateNotifier<AsyncValue<void>> {
         lowStockThreshold: lowStockThreshold,
       );
       state = const AsyncValue.data(null);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
+    } catch (e, st) { state = AsyncValue.error(e, st); }
   }
 
   Future<void> updateProduct({
@@ -65,9 +61,7 @@ class ProductNotifier extends StateNotifier<AsyncValue<void>> {
         lowStockThreshold: lowStockThreshold,
       );
       state = const AsyncValue.data(null);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
+    } catch (e, st) { state = AsyncValue.error(e, st); }
   }
 
   Future<void> deleteProduct(String id) async {
@@ -75,16 +69,13 @@ class ProductNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       await _repo.deleteProduct(id);
       state = const AsyncValue.data(null);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
+    } catch (e, st) { state = AsyncValue.error(e, st); }
   }
 }
 
-final productNotifierProvider =
-    StateNotifierProvider<ProductNotifier, AsyncValue<void>>((ref) {
-      return ProductNotifier(ref.watch(productRepositoryProvider));
-    });
+final productNotifierProvider = StateNotifierProvider<ProductNotifier, AsyncValue<void>>((ref) {
+  return ProductNotifier(ref.watch(productRepositoryProvider));
+});
 
 final productSearchProvider = StateProvider<String>((ref) => '');
 
@@ -95,7 +86,6 @@ final filteredProductsProvider = Provider<List<ProductModel>>((ref) {
   return productsAsync.when(
     data: (products) {
       if (searchQuery.isEmpty) return products;
-
       return products.where((p) {
         return p.name.toLowerCase().contains(searchQuery) ||
             p.category.toLowerCase().contains(searchQuery) ||
@@ -108,14 +98,12 @@ final filteredProductsProvider = Provider<List<ProductModel>>((ref) {
   );
 });
 
-// ✅ RECRÉÉ pour compatibilité stock_screen.dart
 final productActionsProvider = Provider<ProductActions>((ref) {
   return ProductActions(ref);
 });
 
 class ProductActions {
   final Ref _ref;
-
   ProductActions(this._ref);
 
   Future<void> addProduct(ProductModel product) async {

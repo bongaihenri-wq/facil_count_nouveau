@@ -1,30 +1,45 @@
-// lib/presentation/screens/purchases/purchase_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/date_filter_helper.dart';
+import '../../../core/utils/period_picker_bottom_sheet.dart';
+import '../../../core/utils/formatters.dart';
 import '../../providers/purchase_provider.dart';
 import '../../../data/models/purchase_model.dart';
 import '../purchases/purchase_list.dart';
-import '../purchases/purchase_dashboard.dart';
-import 'dialogs/add_purchase_dialog.dart';
-import 'dialogs/filter_purchase_dialog.dart';
-import '../../../core/utils/formatters.dart';
+// 1. On décommente l'import du dashboard puisqu'il est créé !
+import '/presentation/screens/purchases/purchase_dashboard.dart'; 
+import '../purchases/dialogs/add_purchase_dialog.dart'; 
+
+// 🎯 Le provider d'état pour la période des achats (par défaut : mois en cours)
+final selectedPurchasePeriodProvider = StateProvider<DateFilterRange>((ref) {
+  return DateFilterHelper.defaultRange();
+});
 
 class PurchaseScreen extends ConsumerWidget {
   const PurchaseScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 2. On écoute le provider brut des achats pour le chargement/erreur
     final purchasesAsync = ref.watch(purchasesProvider);
+    
+    // On écoute la liste filtrée en mémoire (produits, fournisseurs) pour l'affichage
     final filteredPurchases = ref.watch(filteredPurchasesProvider);
+    
     final selectedTab = ref.watch(purchaseTabProvider);
     final filters = ref.watch(purchaseFiltersProvider);
+    final currentPeriod = ref.watch(selectedPurchasePeriodProvider);
+
+    // Couleur thématique passée en bleu comme convenu pour les achats
+    final themeColor = Colors.blue.shade700;  
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
+      
+      // 🏷️ APP BAR
       appBar: AppBar(
         title: const Text('Achats'),
-        backgroundColor: Colors.blue.shade700, // 🔥 BLEU pour achats
+        backgroundColor: themeColor,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -41,57 +56,158 @@ class PurchaseScreen extends ConsumerWidget {
                 color: filters.isActive ? Colors.white : Colors.white70,
                 size: filters.isActive ? 28 : 24,
               ),
-              onPressed: () => showPurchaseFilterDialog(context),
+              onPressed: () {
+                // TODO: Implémenter showPurchaseFilterDialog(context) si nécessaire
+              },
             ),
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => showAddPurchaseDialog(context),
+            onPressed: () => _openAddPurchaseDialog(context),
           ),
         ],
       ),
+      
+      // 🛠️ CORPS DE L'ÉCRAN (Branché sur les états Supabase)
       body: purchasesAsync.when(
+        // Cas 1 : Données chargées avec succès !
         data: (_) => Column(
           children: [
-            // TABS
+            // 📅 FILTRE PÉRIODE
+            GestureDetector(
+              onTap: () => _showPeriodPicker(context, ref),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                color: Colors.white,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.calendar_month, size: 18, color: themeColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      currentPeriod.label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: themeColor,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_drop_down, size: 20, color: themeColor),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+
+            // 🗂️ SÉLECTION LISTE / DASHBOARD
             Container(
-              color: Colors.blue.shade50, // 🔥 BLEU pour achats
+              color: Colors.blue.shade50, // Passé en bleu pour harmoniser
               child: Row(
                 children: [
-                  _buildTab(context, ref, 'Liste', 0),
-                  _buildTab(context, ref, 'Dashboard', 1),
+                  _buildTab(context, ref, 'Liste', 0, themeColor),
+                  _buildTab(context, ref, 'Dashboard', 1, themeColor),
                 ],
               ),
             ),
+
+            // 💰 TOTAL ACHATS ÉPURÉ
+            _buildTotalCard(filteredPurchases, themeColor),
+
+            // 📝 CONTENU DYNAMIQUE SELON L'ONGLET
             Expanded(
               child: selectedTab == 0
-                  ? _buildListContent(filteredPurchases, filters, ref, context)
-                  : _buildDashboardContent(filteredPurchases),
+                  ? _buildListContent(filteredPurchases)
+                  : PurchaseDashboard(purchases: filteredPurchases), // 🟢 Vrai Dashboard branché !
             ),
           ],
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Erreur: $err')),
+        
+        // Cas 2 : C'est en train de charger depuis Supabase
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: Colors.blue),
+        ),
+        
+        // Cas 3 : Il y a eu une erreur de connexion
+        error: (err, stack) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Text(
+              'Erreur de chargement des achats : $err',
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
       ),
+      
       floatingActionButton: FloatingActionButton(
-        onPressed: () => showAddPurchaseDialog(context),
-        backgroundColor: Colors.blue.shade700, // 🔥 BLEU pour achats
+        onPressed: () => _openAddPurchaseDialog(context),
+        backgroundColor: themeColor,
         child: const Icon(Icons.add, color: Colors.white),
       ),
       bottomNavigationBar: _buildBottomNav(context),
     );
   }
 
-  Widget _buildListContent(
-    List<PurchaseModel> purchases,
-    PurchaseFilters filters,
-    WidgetRef ref,
-    BuildContext context,
-  ) {
-    if (purchases.isEmpty && filters.isActive) {
-      return _buildEmptyFilterState(filters, ref, context);
-    }
+  Widget _buildTotalCard(List<PurchaseModel> purchases, Color themeColor) {
+    if (purchases.isEmpty) return const SizedBox.shrink();
+    
+    final double totalAmount = purchases.fold(0, (sum, item) => sum + item.amount);
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Total achats',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            '${Formatters.formatCurrency(totalAmount)} FCFA',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: themeColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
+  void _showPeriodPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => PeriodPickerBottomSheet(
+        onPeriodSelected: (newRange) {
+          ref.read(selectedPurchasePeriodProvider.notifier).state = newRange;
+        },
+      ),
+    );
+  }
+
+  void _openAddPurchaseDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const AddPurchaseDialog(),
+    );
+  }
+
+  Widget _buildListContent(List<PurchaseModel> purchases) {
     if (purchases.isEmpty) {
       return _buildEmptyState();
     }
@@ -102,91 +218,20 @@ class PurchaseScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDashboardContent(
-    List<PurchaseModel> purchases,
-  ) {
-    if (purchases.isEmpty) {
-      return _buildEmptyState();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 80),
-      child: PurchaseDashboard(purchases: purchases),
-    );
-  }
-
-  Widget _buildEmptyFilterState(
-    PurchaseFilters filters,
-    WidgetRef ref,
-    BuildContext context,
-  ) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.filter_alt_off, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          const Text(
-            'Aucun achat pour cette période',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Période: ${_getPeriodLabel(filters.period)}',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              ref.read(purchaseFiltersProvider.notifier).clearFilters();
-            },
-            icon: const Icon(Icons.clear),
-            label: const Text('Réinitialiser le filtre'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue, // 🔥 BLEU pour achats
-              foregroundColor: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => showPurchaseFilterDialog(context),
-            icon: const Icon(Icons.filter_list),
-            label: const Text('Changer le filtre'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getPeriodLabel(String? period) {
-    switch (period) {
-      case 'day':
-        return 'Aujourd\'hui';
-      case 'week':
-        return 'Cette semaine';
-      case 'month':
-        return 'Ce mois';
-      case 'year':
-        return 'Cette année';
-      default:
-        return 'Sélectionnée';
-    }
-  }
-
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.shopping_cart_outlined,
+            Icons.shopping_cart_checkout_outlined,
             size: 80,
             color: Colors.grey.shade300,
           ),
           const SizedBox(height: 16),
           Text(
-            'Aucun achat effectué',
-            style: TextStyle(fontSize: 20, color: Colors.grey.shade600),
+            'Aucun achat pour cette période',
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 8),
           Text(
@@ -198,12 +243,7 @@ class PurchaseScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTab(
-    BuildContext context,
-    WidgetRef ref,
-    String label,
-    int index,
-  ) {
+  Widget _buildTab(BuildContext context, WidgetRef ref, String label, int index, Color themeColor) {
     final currentTab = ref.watch(purchaseTabProvider);
     final isSelected = currentTab == index;
 
@@ -215,8 +255,9 @@ class PurchaseScreen extends ConsumerWidget {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: isSelected ? Colors.blue.shade700 : Colors.transparent, // 🔥 BLEU
+                color: isSelected ? themeColor : Colors.transparent,
                 width: 3,
+                // height: 0, // Inutile ici mais laissé propre
               ),
             ),
           ),
@@ -224,7 +265,7 @@ class PurchaseScreen extends ConsumerWidget {
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isSelected ? Colors.blue.shade700 : Colors.grey, // 🔥 BLEU
+              color: isSelected ? themeColor : Colors.grey,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               fontSize: 16,
             ),
@@ -238,9 +279,9 @@ class PurchaseScreen extends ConsumerWidget {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
       backgroundColor: Colors.white,
-      selectedItemColor: Colors.blue.shade700, // 🔥 BLEU pour achats
+      selectedItemColor: Colors.orange.shade800, 
       unselectedItemColor: Colors.grey[400],
-      currentIndex: 1,
+      currentIndex: 1, 
       onTap: (index) {
         switch (index) {
           case 0:
