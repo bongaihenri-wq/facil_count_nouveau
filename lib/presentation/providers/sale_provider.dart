@@ -1,23 +1,42 @@
 // lib/presentation/providers/sale_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../data/models/sale_model.dart'; // 🟢 Pointera vers ton modèle de vente
-import '../../data/repositories/sale_repository.dart'; // 🟢 Pointera vers ton repository de vente
+import '../../data/models/sale_model.dart'; 
+import '../../data/repositories/sale_repository.dart'; 
 import '../../core/utils/business_helper.dart';
+import '../../core/utils/date_filter_helper.dart'; // 🟢 Pour le calcul des dates
+import '../screens/sales/sale_screen.dart';
+import '/presentation/screens/dashboard/providers/dashboard_provider.dart';
 
+/// 1. Provider du Repository
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {
   final client = Supabase.instance.client;
   final businessHelper = ref.watch(businessHelperProvider);
   return SaleRepository(client, businessHelper, ref);
 });
 
-// Sales list
+// 2. Provider de la liste brute des ventes (Filtrée par date via Supabase)
+// 2. Provider de la liste brute des ventes (Intelligent et Polymorphe)
 final salesProvider = FutureProvider<List<SaleModel>>((ref) async {
   final repo = ref.watch(saleRepositoryProvider);
-  return repo.getSales();
+  
+  // 1. On regarde sur quel écran se trouve l'utilisateur
+  final currentScreen = ref.watch(currentScreenProvider);
+  
+  // 2. On choisit dynamiquement la période à écouter !
+  final currentPeriod = (currentScreen == 'dashboard')
+      ? ref.watch(selectedDashboardPeriodProvider) // Filtre du Dashboard
+      : ref.watch(selectedSalePeriodProvider);      // Filtre de l'écran Ventes
+  
+  print('🛰️ Provider Ventes - Écran actif : $currentScreen');
+  print('📅 Dates envoyées à Supabase : ${currentPeriod.start} au ${currentPeriod.end}');
+  
+  return repo.getSales(
+    startDate: currentPeriod.start,
+    endDate: currentPeriod.end,
+  );
 });
-
-// Actions
+/// 3. Notifier pour gérer les actions d'écriture (Create, Update, Delete)
 class SaleNotifier extends StateNotifier<AsyncValue<void>> {
   final SaleRepository _repo;
 
@@ -27,9 +46,9 @@ class SaleNotifier extends StateNotifier<AsyncValue<void>> {
     required String productId,
     required int quantity,
     required double amount,
-    String? clientId, // 🟢 Adapté de supplier -> clientId
+    String? clientId, 
     required DateTime saleDate,
-    bool isPaid = true, // 🟢 Nommé isPaid pour correspondre à ton add_sale_dialog.dart
+    bool isPaid = true, 
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -95,23 +114,24 @@ final saleNotifierProvider =
       return SaleNotifier(ref.watch(saleRepositoryProvider));
     });
 
-// Filtres
+/// 4. Classe et Notifier pour les filtres secondaires (Hors date)
 class SaleFilters {
   final String? productId;
   final DateTime? startDate;
   final DateTime? endDate;
-  final String? clientId; // 🟢 Adapté de supplier -> clientId
+  final String? clientId; 
   final String? period;
   final int? minQuantity;
   final int? maxQuantity;
-
 
   const SaleFilters({
     this.productId,
     this.startDate,
     this.endDate,
     this.clientId,
-    this.period, this.minQuantity, this.maxQuantity,
+    this.period, 
+    this.minQuantity, 
+    this.maxQuantity,
   });
 
   bool get isActive =>
@@ -126,13 +146,17 @@ class SaleFilters {
     DateTime? startDate,
     DateTime? endDate,
     String? clientId,
-    String? period, int? minQuantity, int? maxQuantity,
+    String? period, 
+    int? minQuantity, 
+    int? maxQuantity,
   }) => SaleFilters(
     productId: productId ?? this.productId,
     startDate: startDate ?? this.startDate,
     endDate: endDate ?? this.endDate,
     clientId: clientId ?? this.clientId,
     period: period ?? this.period,
+    minQuantity: minQuantity ?? this.minQuantity,
+    maxQuantity: maxQuantity ?? this.maxQuantity,
   );
 }
 
@@ -143,7 +167,9 @@ class SaleFiltersNotifier extends StateNotifier<SaleFilters> {
     String? productId,
     DateTime? startDate,
     DateTime? endDate,
-    String? clientId, int? minQuantity, int? maxQuantity,
+    String? clientId, 
+    int? minQuantity, 
+    int? maxQuantity,
   }) {
     state = state.copyWith(
       productId: productId,
@@ -163,25 +189,23 @@ final saleFiltersProvider =
       return SaleFiltersNotifier();
     });
 
-// Filtre dynamique des ventes
+/// 5. Le Provider dérivé qui applique les filtres en mémoire (Clients, Produits...)
 final filteredSalesProvider = Provider<List<SaleModel>>((ref) {
   final allSales = ref.watch(salesProvider).valueOrNull ?? [];
   final filters = ref.watch(saleFiltersProvider);
 
   print('Filtres Ventes actifs: ${filters.isActive}');
 
+  // Si aucun filtre secondaire n'est coché, on renvoie la liste filtrée uniquement par date
+  if (!filters.isActive) {
+    return allSales;
+  }
+
   return allSales.where((sale) {
     if (filters.productId != null && sale.productId != filters.productId) {
       return false;
     }
-    if (filters.startDate != null &&
-        sale.saleDate.isBefore(filters.startDate!)) {
-      return false;
-    }
-    if (filters.endDate != null &&
-        sale.saleDate.isAfter(filters.endDate!)) {
-      return false;
-    }
+    
     if (filters.clientId != null &&
         !(sale.clientId?.toLowerCase().contains(
               filters.clientId!.toLowerCase(),
@@ -193,5 +217,5 @@ final filteredSalesProvider = Provider<List<SaleModel>>((ref) {
   }).toList();
 });
 
-// Tab state pour les ventes
+/// 6. Tab state pour naviguer entre Liste et Dashboard
 final saleTabProvider = StateProvider<int>((ref) => 0);

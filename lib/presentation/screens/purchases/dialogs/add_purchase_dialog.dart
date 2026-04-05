@@ -1,5 +1,3 @@
-// lib/presentation/screens/purchases/dialogs/add_purchase_dialog.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,13 +38,14 @@ class _AddPurchaseDialogState extends ConsumerState<AddPurchaseDialog> {
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
+    final themeColor = Colors.orange.shade800; // Couleur harmonisée
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.shopping_cart, color: Colors.blue), // 🔥 BLEU
-          SizedBox(width: 8),
-          Text('Nouvel achat'),
+          Icon(Icons.shopping_cart, color: themeColor),
+          const SizedBox(width: 8),
+          const Text('Nouvel achat'),
         ],
       ),
       content: SingleChildScrollView(
@@ -187,6 +186,8 @@ class _AddPurchaseDialogState extends ConsumerState<AddPurchaseDialog> {
                     setState(() => _quantityError = null);
                   }
                 }
+                // Force le setState pour recalculer la prédiction du stock
+                setState(() {});
               },
             ),
 
@@ -265,7 +266,7 @@ class _AddPurchaseDialogState extends ConsumerState<AddPurchaseDialog> {
           icon: const Icon(Icons.save),
           label: const Text('Enregistrer'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue, // 🔥 BLEU
+            backgroundColor: themeColor,
             foregroundColor: Colors.white,
             disabledBackgroundColor: Colors.grey[300],
           ),
@@ -284,7 +285,7 @@ class _AddPurchaseDialogState extends ConsumerState<AddPurchaseDialog> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.blue.shade700, // 🔥 BLEU
+              primary: Colors.orange.shade800, 
             ),
           ),
           child: child!,
@@ -318,7 +319,7 @@ class _AddPurchaseDialogState extends ConsumerState<AddPurchaseDialog> {
         productId: _selectedProduct!.id,
         quantity: quantity,
         amount: amount,
-        supplier: _supplierCtrl.text.trim().isEmpty
+        supplierId: _supplierCtrl.text.trim().isEmpty // 👈 CORRIGÉ ICI
             ? null
             : _supplierCtrl.text.trim(),
         purchaseDate: _purchaseDate,
@@ -333,7 +334,7 @@ class _AddPurchaseDialogState extends ConsumerState<AddPurchaseDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ Achat enregistré: $quantity x ${_selectedProduct!.name}'),
-            backgroundColor: Colors.blue, // 🔥 BLEU
+            backgroundColor: Colors.orange.shade800,
           ),
         );
       }

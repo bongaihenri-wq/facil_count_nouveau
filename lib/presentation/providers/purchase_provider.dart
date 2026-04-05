@@ -1,25 +1,43 @@
 // lib/presentation/providers/purchase_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../data/models/purchase_model.dart';
-import '../../data/repositories/purchase_repository.dart';
+import '../../data/models/purchase_model.dart'; 
+import '../../data/repositories/purchase_repository.dart'; 
 import '../../core/utils/business_helper.dart';
+import '../../core/utils/date_filter_helper.dart'; // 🟢 Pour le calcul des dates
+import '../screens/purchases/purchase_screen.dart'; // 🟢 Pour écouter la période sélectionnée
+import '/presentation/screens/dashboard/providers/dashboard_provider.dart';
 
-
+/// 1. Provider du Repository
 final purchaseRepositoryProvider = Provider<PurchaseRepository>((ref) {
   final client = Supabase.instance.client;
   final businessHelper = ref.watch(businessHelperProvider);
-  return PurchaseRepository(client, businessHelper);
+  return PurchaseRepository(client, businessHelper, ref);
 });
 
-
-// Purchases list
+// 2. Provider de la liste brute des achats (Filtrée par date via Supabase)
 final purchasesProvider = FutureProvider<List<PurchaseModel>>((ref) async {
   final repo = ref.watch(purchaseRepositoryProvider);
-  return repo.getPurchases();
+  
+  // 1. 🧭 On regarde sur quel écran se trouve l'utilisateur
+  final currentScreen = ref.watch(currentScreenProvider);
+  
+  // 2. 🎯 On choisit dynamiquement la période à écouter !
+  final currentPeriod = (currentScreen == 'dashboard')
+      ? ref.watch(selectedDashboardPeriodProvider) // Filtre du Dashboard
+      : ref.watch(selectedPurchasePeriodProvider);  // Filtre de l'écran Achats
+  
+  print('🛰️ Provider Achats - Écran actif : $currentScreen');
+  print('📅 Dates envoyées à Supabase : ${currentPeriod.start} au ${currentPeriod.end}');
+  
+  // 📥 On passe directement les dates stockées dans l'état de la période !
+  return repo.getPurchases(
+    startDate: currentPeriod.start,
+    endDate: currentPeriod.end,
+  );
 });
 
-// Actions
+/// 3. Notifier pour gérer les actions d'écriture (Create, Update, Delete)
 class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
   final PurchaseRepository _repo;
 
@@ -29,9 +47,10 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
     required String productId,
     required int quantity,
     required double amount,
-    String? supplier,
+    String? supplierId, 
     required DateTime purchaseDate,
-    bool paid = true,  // ← AJOUTÉ
+    bool paid = true,
+    bool locked = false,
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -39,9 +58,10 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
         productId: productId,
         quantity: quantity,
         amount: amount,
-        supplier: supplier,
+        supplierId: supplierId,
         purchaseDate: purchaseDate,
-        paid: paid,  // ← AJOUTÉ
+        paid: paid,
+        locked: locked,
       );
       state = const AsyncValue.data(null);
     } catch (e, st) {
@@ -54,10 +74,10 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
     required String productId,
     required int quantity,
     required double amount,
-    String? supplier,
+    String? supplierId,
     required DateTime purchaseDate,
-    required bool paid,
-    required bool locked,
+    bool paid = true,
+    bool locked = false,
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -66,7 +86,7 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
         productId: productId,
         quantity: quantity,
         amount: amount,
-        supplier: supplier,
+        supplierId: supplierId,
         purchaseDate: purchaseDate,
         paid: paid,
         locked: locked,
@@ -80,11 +100,7 @@ class PurchaseNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> deletePurchase(PurchaseModel purchase) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.deletePurchase(
-        purchase.id,
-        purchase.productId,
-        purchase.quantity,
-      );
+      await _repo.deletePurchase(purchase.id);
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -97,41 +113,49 @@ final purchaseNotifierProvider =
       return PurchaseNotifier(ref.watch(purchaseRepositoryProvider));
     });
 
-// Filtres
+/// 4. Classe et Notifier pour les filtres secondaires (Hors date)
 class PurchaseFilters {
   final String? productId;
   final DateTime? startDate;
   final DateTime? endDate;
-  final String? supplier;
+  final String? supplierId; 
   final String? period;
+  final int? minQuantity;
+  final int? maxQuantity;
 
   const PurchaseFilters({
     this.productId,
     this.startDate,
     this.endDate,
-    this.supplier,
-    this.period,
+    this.supplierId,
+    this.period, 
+    this.minQuantity, 
+    this.maxQuantity,
   });
 
   bool get isActive =>
       productId != null ||
       startDate != null ||
       endDate != null ||
-      supplier != null ||
+      supplierId != null ||
       period != null;
 
   PurchaseFilters copyWith({
     String? productId,
     DateTime? startDate,
     DateTime? endDate,
-    String? supplier,
-    String? period,
+    String? supplierId,
+    String? period, 
+    int? minQuantity, 
+    int? maxQuantity,
   }) => PurchaseFilters(
     productId: productId ?? this.productId,
     startDate: startDate ?? this.startDate,
     endDate: endDate ?? this.endDate,
-    supplier: supplier ?? this.supplier,
+    supplierId: supplierId ?? this.supplierId,
     period: period ?? this.period,
+    minQuantity: minQuantity ?? this.minQuantity,
+    maxQuantity: maxQuantity ?? this.maxQuantity,
   );
 }
 
@@ -142,13 +166,17 @@ class PurchaseFiltersNotifier extends StateNotifier<PurchaseFilters> {
     String? productId,
     DateTime? startDate,
     DateTime? endDate,
-    String? supplier,
+    String? supplierId, 
+    int? minQuantity, 
+    int? maxQuantity,
   }) {
     state = state.copyWith(
       productId: productId,
       startDate: startDate,
       endDate: endDate,
-      supplier: supplier,
+      supplierId: supplierId,
+      minQuantity: minQuantity,
+      maxQuantity: maxQuantity,
     );
   }
 
@@ -160,28 +188,26 @@ final purchaseFiltersProvider =
       return PurchaseFiltersNotifier();
     });
 
-// ⭐ CORRIGÉ : Retourne List<PurchaseModel> directement (identique à SaleScreen)
+/// 5. Le Provider dérivé qui applique les filtres en mémoire (Fournisseurs, Produits...)
 final filteredPurchasesProvider = Provider<List<PurchaseModel>>((ref) {
   final allPurchases = ref.watch(purchasesProvider).valueOrNull ?? [];
   final filters = ref.watch(purchaseFiltersProvider);
 
-  print('Filtres actifs: ${filters.isActive}');
+  print('Filtres Achats actifs: ${filters.isActive}');
+
+  // Si aucun filtre secondaire n'est coché, on renvoie la liste filtrée uniquement par date
+  if (!filters.isActive) {
+    return allPurchases;
+  }
 
   return allPurchases.where((purchase) {
     if (filters.productId != null && purchase.productId != filters.productId) {
       return false;
     }
-    if (filters.startDate != null &&
-        purchase.purchaseDate.isBefore(filters.startDate!)) {
-      return false;
-    }
-    if (filters.endDate != null &&
-        purchase.purchaseDate.isAfter(filters.endDate!)) {
-      return false;
-    }
-    if (filters.supplier != null &&
+    
+    if (filters.supplierId != null &&
         !(purchase.supplier?.toLowerCase().contains(
-              filters.supplier!.toLowerCase(),
+              filters.supplierId!.toLowerCase(),
             ) ??
             false)) {
       return false;
@@ -190,5 +216,5 @@ final filteredPurchasesProvider = Provider<List<PurchaseModel>>((ref) {
   }).toList();
 });
 
-// Tab state
+/// 6. Tab state pour naviguer entre Liste et Dashboard
 final purchaseTabProvider = StateProvider<int>((ref) => 0);

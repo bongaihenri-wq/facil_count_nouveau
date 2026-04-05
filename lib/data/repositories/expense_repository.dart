@@ -102,7 +102,10 @@ class ExpenseRepository {
   }
 
   Future<Map<String, dynamic>> getMonthlyStats() async {
-    final response = await _client.rpc('get_expense_stats');
+    final businessId = await _businessHelper.getBusinessId();
+    final response = await _client.rpc('get_expense_stats', params: {
+      'p_business_id': businessId,
+    });
     return response as Map<String, dynamic>;
   }
 }

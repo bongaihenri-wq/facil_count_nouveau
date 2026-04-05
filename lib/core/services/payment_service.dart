@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../../data/models/subscription_model.dart';
 
-export '../../data/models/subscription_model.dart';
 
 // ==================== ENUMS ====================
 

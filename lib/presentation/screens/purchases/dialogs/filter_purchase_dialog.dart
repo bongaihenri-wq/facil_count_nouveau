@@ -30,6 +30,7 @@ class _FilterPurchaseDialogContentState
   final _supplierCtrl = TextEditingController();
   DateTime? _startDate;
   DateTime? _endDate;
+  bool _isInit = true; // Pour charger l'état initial une seule fois
 
   @override
   void dispose() {
@@ -37,10 +38,47 @@ class _FilterPurchaseDialogContentState
     super.dispose();
   }
 
+  // Cette méthode permet de charger les filtres actuellement actifs
+  void _loadExistingFilters() {
+    final currentFilters = ref.read(purchaseFiltersProvider);
+    
+    // On charge le fournisseur
+    if (currentFilters.supplierId != null) {
+      _supplierCtrl.text = currentFilters.supplierId!;
+    }
+    
+    // On charge les dates
+    _startDate = currentFilters.startDate;
+    _endDate = currentFilters.endDate;
+
+    // On charge le produit sélectionné
+    if (currentFilters.productId != null) {
+      final productsAsync = ref.read(productsProvider);
+      productsAsync.whenData((products) {
+        try {
+          setState(() {
+            _selectedProduct = products.firstWhere(
+              (p) => p.id == currentFilters.productId,
+            );
+          });
+        } catch (_) {
+          // Produit introuvable
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom + 25;
+    final themeColor = Colors.orange.shade800; // Couleur harmonisée pour les achats
+
+    // On initialise une fois au premier build
+    if (_isInit) {
+      _loadExistingFilters();
+      _isInit = false;
+    }
 
     return Padding(
       padding: EdgeInsets.only(
@@ -53,9 +91,15 @@ class _FilterPurchaseDialogContentState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Filtrer les achats',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Icon(Icons.filter_alt, color: themeColor),
+              const SizedBox(width: 8),
+              const Text(
+                'Filtrer les achats',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -79,7 +123,7 @@ class _FilterPurchaseDialogContentState
                 border: OutlineInputBorder(),
               ),
             ),
-            loading: () => const CircularProgressIndicator(),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (_, __) => const Text('Erreur chargement produits'),
           ),
 
@@ -91,6 +135,7 @@ class _FilterPurchaseDialogContentState
             decoration: const InputDecoration(
               labelText: 'Fournisseur',
               border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.business),
             ),
           ),
 
@@ -101,7 +146,7 @@ class _FilterPurchaseDialogContentState
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.calendar_today),
+                  icon: const Icon(Icons.calendar_today, size: 18),
                   onPressed: () async {
                     final picked = await showDatePicker(
                       context: context,
@@ -121,7 +166,7 @@ class _FilterPurchaseDialogContentState
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.calendar_today),
+                  icon: const Icon(Icons.calendar_today, size: 18),
                   onPressed: () async {
                     final picked = await showDatePicker(
                       context: context,
@@ -147,31 +192,45 @@ class _FilterPurchaseDialogContentState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () {
-                  ref.read(purchaseFiltersProvider.notifier).clearFilters();
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.clear),
-                label: const Text('Réinitialiser'),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade600,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 45),
+                  ),
+                  onPressed: () {
+                    ref.read(purchaseFiltersProvider.notifier).clearFilters();
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.clear),
+                  label: const Text('Réinitialiser'),
+                ),
               ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  ref
-                      .read(purchaseFiltersProvider.notifier)
-                      .setFilters(
-                        productId: _selectedProduct?.id,
-                        supplier: _supplierCtrl.text.trim().isEmpty
-                            ? null
-                            : _supplierCtrl.text.trim(),
-                        startDate: _startDate,
-                        endDate: _endDate,
-                      );
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.check),
-                label: const Text('Appliquer'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 45),
+                  ),
+                  onPressed: () {
+                    ref
+                        .read(purchaseFiltersProvider.notifier)
+                        .setFilters(
+                          productId: _selectedProduct?.id,
+                          supplierId: _supplierCtrl.text.trim().isEmpty // 👈 CORRIGÉ ICI
+                              ? null
+                              : _supplierCtrl.text.trim(),
+                          startDate: _startDate,
+                          endDate: _endDate,
+                        );
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.check),
+                  label: const Text('Appliquer'),
+                ),
               ),
             ],
           ),

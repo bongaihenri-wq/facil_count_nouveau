@@ -1,4 +1,3 @@
-import 'package:facil_count_nouveau/presentation/providers/sale_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +5,6 @@ import 'package:intl/intl.dart';
 import '../../../../data/models/product_model.dart';
 import '../../../../data/models/purchase_model.dart';
 import '../../../providers/purchase_provider.dart';
-import '../../../providers/expense_provider.dart'; // Pour productsProvider
 import '../../sales/widgets/product_selector.dart';
 import '../../../providers/product_provider.dart';
 
@@ -46,7 +44,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
     _amountCtrl = TextEditingController(
       text: widget.purchase.amount.toString(),
     );
-    _supplierCtrl = TextEditingController(text: widget.purchase.supplier ?? '');
+    _supplierCtrl = TextEditingController(text: widget.purchase.supplier ?? ''); // 👈 Corrigé
     _purchaseDate = widget.purchase.purchaseDate;
     _paid = widget.purchase.paid;
     _locked = widget.purchase.locked;
@@ -71,6 +69,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
           name: widget.purchase.productName ?? 'Produit inconnu',
           category: 'Autre',
           createdAt: DateTime.now(),
+       
         ),
       );
       setState(() {
@@ -86,13 +85,20 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
     final state = ref.watch(purchaseNotifierProvider);
+    final themeColor = Colors.blue.shade700; // Couleur harmonisée
 
     if (_locked) {
       return _buildLockedView();
     }
 
     return AlertDialog(
-      title: const Text('Modifier achat'),
+      title: Row(
+        children: [
+          Icon(Icons.edit, color: themeColor),
+          const SizedBox(width: 8),
+          const Text('Modifier achat'),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -103,7 +109,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
               subtitle: const Text('Empêche toute modification future'),
               value: _locked,
               onChanged: (v) => setState(() => _locked = v),
-              activeColor: Colors.orange,
+              activeColor: themeColor,
             ),
 
             const Divider(),
@@ -130,6 +136,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
               decoration: const InputDecoration(
                 labelText: 'Quantité *',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.format_list_numbered),
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -143,6 +150,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
               decoration: const InputDecoration(
                 labelText: 'Montant total (CFA) *',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.attach_money),
               ),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
@@ -160,6 +168,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
               decoration: const InputDecoration(
                 labelText: 'Fournisseur (optionnel)',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.business),
               ),
             ),
 
@@ -170,6 +179,9 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
               onPressed: _pickDate,
               icon: const Icon(Icons.calendar_today),
               label: Text(DateFormat('dd/MM/yyyy').format(_purchaseDate)),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+              ),
             ),
 
             const SizedBox(height: 8),
@@ -178,25 +190,27 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
             SwitchListTile(
               title: const Text('Payé'),
               value: _paid,
+              activeColor: Colors.green,
               onChanged: (v) => setState(() => _paid = v),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(
+        TextButton.icon(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler'),
+          icon: const Icon(Icons.cancel_outlined),
+          label: const Text('Annuler'),
         ),
-        ElevatedButton(
+        ElevatedButton.icon(
           onPressed: state.isLoading || _isLoadingProduct ? null : _submit,
-          child: state.isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Enregistrer'),
+          icon: const Icon(Icons.save),
+          label: const Text('Enregistrer'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: themeColor,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey[300],
+          ),
         ),
       ],
     );
@@ -233,9 +247,10 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Fermer'),
         ),
-        TextButton(
+        TextButton.icon(
           onPressed: _showUnlockConfirm,
-          child: const Text(
+          icon: const Icon(Icons.lock_open, color: Colors.red, size: 18),
+          label: const Text(
             'Déverrouiller',
             style: TextStyle(color: Colors.red),
           ),
@@ -250,6 +265,16 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
       initialDate: _purchaseDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.orange.shade800,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) setState(() => _purchaseDate = picked);
   }
@@ -295,25 +320,29 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
       return;
     }
 
-    await ref
-        .read(purchaseNotifierProvider.notifier)
-        .updatePurchase(
-          id: widget.purchase.id,
-          productId: _selectedProduct!.id,
-          quantity: quantity,
-          amount: amount,
-          supplier: _supplierCtrl.text.trim().isEmpty
-              ? null
-              : _supplierCtrl.text.trim(),
-          purchaseDate: _purchaseDate,
-          paid: _paid,
-          locked: _locked,
-        );
+    try {
+      await ref
+          .read(purchaseNotifierProvider.notifier)
+          .updatePurchase(
+            id: widget.purchase.id,
+            productId: _selectedProduct!.id,
+            quantity: quantity,
+            amount: amount,
+            supplierId: _supplierCtrl.text.trim().isEmpty // 👈 CORRIGÉ ICI
+                ? null
+                : _supplierCtrl.text.trim(),
+            purchaseDate: _purchaseDate,
+            paid: _paid,
+            locked: _locked,
+          );
 
-    ref.invalidate(purchasesProvider);
-    ref.invalidate(productsProvider);
+      ref.invalidate(purchasesProvider);
+      ref.invalidate(productsProvider);
 
-    if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      _showError('Erreur lors de la modification : $e');
+    }
   }
 
   void _showError(String msg) {

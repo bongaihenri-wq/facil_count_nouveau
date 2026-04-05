@@ -1,8 +1,7 @@
-// lib/presentation/screens/purchases/purchase_dashboard.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../../data/models/purchase_model.dart';
+// ⚠️ Adapte l'import vers ton modèle d'achat
+import '../../../../data/models/purchase_model.dart'; 
 import 'package:facil_count_nouveau/core/utils/formatters.dart';
 
 class PurchaseDashboard extends StatelessWidget {
@@ -15,6 +14,7 @@ class PurchaseDashboard extends StatelessWidget {
     final fmt = DateFormat('MMMM yyyy', 'fr_FR');
 
     for (final purchase in purchases) {
+      // ⚠️ Assure-toi que ton modèle a bien un champ 'purchaseDate' et 'amount'
       final key = fmt.format(purchase.purchaseDate);
       totals[key] = (totals[key] ?? 0) + purchase.amount;
     }
@@ -30,10 +30,12 @@ class PurchaseDashboard extends StatelessWidget {
     final monthlyTotals = _getMonthlyTotals();
     final now = DateTime.now();
 
+    // Total du mois en cours
     final currentMonthTotal = purchases
         .where((p) => p.purchaseDate.year == now.year && p.purchaseDate.month == now.month)
         .fold<double>(0, (sum, p) => sum + p.amount);
 
+    // Total du mois précédent
     final previousMonth = DateTime(now.year, now.month - 1, 1);
     final previousMonthTotal = purchases
         .where((p) =>
@@ -43,16 +45,17 @@ class PurchaseDashboard extends StatelessWidget {
 
     final difference = currentMonthTotal - previousMonthTotal;
 
-    return SingleChildScrollView(
+return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          // 💳 CARTE PRINCIPALE (Thème Bleu pour Purchases)
           Card(
             elevation: 3,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            color: Colors.blue.shade50, // 🔥 BLEU
+            color: Colors.blue.shade50, // Fond bleu clair
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -67,7 +70,7 @@ class PurchaseDashboard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 34,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade800, // 🔥 BLEU
+                      color: Colors.blue.shade800, // Texte bleu foncé
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -78,23 +81,25 @@ class PurchaseDashboard extends StatelessWidget {
                         difference >= 0
                             ? Icons.arrow_upward
                             : Icons.arrow_downward,
-                        color: difference >= 0 ? Colors.blue : Colors.red, // 🔥 BLEU si positif
+                        color: difference >= 0 ? Colors.blue : Colors.orange,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         '${Formatters.formatCurrency(difference.abs())} vs mois préc.',
                         style: TextStyle(
-                          color: difference >= 0 ? Colors.blue : Colors.red, // 🔥 BLEU si positif
+                          color: difference >= 0 ? Colors.blue : Colors.orange,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ],
+                    ], // 👈 La parenthèse en trop était ici !
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 24),
+          
+          // 📑 LISTE DES MOIS
           ...monthlyTotals.entries.map((entry) {
             return Card(
               margin: const EdgeInsets.only(bottom: 8),

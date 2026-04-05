@@ -1,24 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/date_filter_helper.dart';
+import '../../../core/utils/period_picker_bottom_sheet.dart';
+import '../../../core/utils/formatters.dart';
 import '../../providers/sale_provider.dart';
 import '../../../data/models/sale_model.dart';
 import 'widgets/sale_list.dart';
 import 'widgets/sale_dashboard.dart';
-import '../sales/dialogs/add_sale_dialog.dart'; // 🔥 Ajuste l'import si ce fichier est dans un autre dossier
+import '../sales/dialogs/add_sale_dialog.dart';
 import 'dialogs/filter_dialog.dart';
+
+// 🎯 Le provider d'état pour la période (par défaut : mois en cours)
+// On l'appelle différemment pour ne pas entrer en conflit avec celui des dépenses
+final selectedSalePeriodProvider = StateProvider<DateFilterRange>((ref) {
+  return DateFilterHelper.defaultRange();
+});
 
 class SaleScreen extends ConsumerWidget {
   const SaleScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final salesAsync = ref.watch(salesProvider);  // Pour le loading/error global
-    final filteredSales = ref.watch(filteredSalesProvider);  // ⭐ List<SaleModel> direct
+    final salesAsync = ref.watch(salesProvider);
+    final filteredSales = ref.watch(filteredSalesProvider);
     final selectedTab = ref.watch(saleTabProvider);
     final filters = ref.watch(saleFiltersProvider);
+    
+    // 🛡️ On récupère la période actuelle
+    final currentPeriod = ref.watch(selectedSalePeriodProvider);
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
+      
+      // 🏷️ 1. APP BAR
       appBar: AppBar(
         title: const Text('Ventes'),
         backgroundColor: Colors.green.shade700,
@@ -43,15 +57,43 @@ class SaleScreen extends ConsumerWidget {
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            // 🔥 MODIFIÉ : Utilisation directe de showDialog
             onPressed: () => _openAddSaleDialog(context),
           ),
         ],
       ),
+      
       body: salesAsync.when(
         data: (_) => Column(
           children: [
-            // TABS
+            // 📅 2. FILTRE PÉRIODE (Juste en dessous de l'app bar)
+            GestureDetector(
+              onTap: () => _showPeriodPicker(context, ref),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                color: Colors.white,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.calendar_month, size: 18, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Text(
+                      currentPeriod.label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_drop_down, size: 20, color: Colors.green.shade700),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+
+            // 🗂️ 3. SÉLECTION LISTE / DASHBOARD (Les onglets)
             Container(
               color: Colors.green.shade50,
               child: Row(
@@ -62,19 +104,22 @@ class SaleScreen extends ConsumerWidget {
               ),
             ),
 
-            // CONTENU - Passe filteredSales (List) directement
+            // 💰 4. TOTAL VENTES ÉPURÉ (Juste au-dessus du contenu)
+            _buildTotalCard(filteredSales),
+
+            // 📝 5. CONTENU
             Expanded(
               child: selectedTab == 0
-                  ? _buildListContent(filteredSales, filters, ref, context)  // ⭐ List
-                  : _buildDashboardContent(filteredSales),                   // ⭐ List
+                  ? _buildListContent(filteredSales)
+                  : _buildDashboardContent(filteredSales),
             ),
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text('Erreur: $err')),
       ),
+      
       floatingActionButton: FloatingActionButton(
-        // 🔥 MODIFIÉ : Utilisation directe de showDialog ici aussi
         onPressed: () => _openAddSaleDialog(context),
         backgroundColor: Colors.green.shade700,
         child: const Icon(Icons.add, color: Colors.white),
@@ -83,7 +128,57 @@ class SaleScreen extends ConsumerWidget {
     );
   }
 
-  // 🔥 NOUVELLE MÉTHODE : Centralise l'ouverture de la boîte de dialogue
+  // Widget épuré pour le montant total
+  Widget _buildTotalCard(List<SaleModel> sales) {
+    if (sales.isEmpty) return const SizedBox.shrink();
+    
+    // Calcul de la somme totale des ventes filtrées
+    final double totalAmount = sales.fold(0, (sum, item) => sum + item.amount);
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Total ventes',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            '${Formatters.formatCurrency(totalAmount)} FCFA',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.green.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPeriodPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => PeriodPickerBottomSheet(
+        onPeriodSelected: (newRange) {
+          ref.read(selectedSalePeriodProvider.notifier).state = newRange;
+        },
+      ),
+    );
+  }
+
   void _openAddSaleDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -91,97 +186,26 @@ class SaleScreen extends ConsumerWidget {
     );
   }
 
-  // ⭐ MODIFIÉ : Accepte List<SaleModel> au lieu de AsyncValue
-  Widget _buildListContent(
-    List<SaleModel> sales,  // ⭐ Changé de AsyncValue à List
-    SaleFilters filters,
-    WidgetRef ref,
-    BuildContext context,
-  ) {
-    if (sales.isEmpty && filters.isActive) {
-      return _buildEmptyFilterState(filters, ref, context);
-    }
-
+  Widget _buildListContent(List<SaleModel> sales) {
     if (sales.isEmpty) {
       return _buildEmptyState();
     }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
-      child: SaleList(sales: sales),  // ⭐ Passe la liste directement
+      child: SaleList(sales: sales),
     );
   }
 
-  // ⭐ MODIFIÉ : Accepte List<SaleModel> au lieu de AsyncValue
-  Widget _buildDashboardContent(
-    List<SaleModel> sales,  // ⭐ Changé de AsyncValue à List
-  ) {
+  Widget _buildDashboardContent(List<SaleModel> sales) {
     if (sales.isEmpty) {
       return _buildEmptyState();
     }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
-      child: SaleDashboard(sales: sales),  // ⭐ Passe la liste directement
+      child: SaleDashboard(sales: sales),
     );
-  }
-
-  Widget _buildEmptyFilterState(
-    SaleFilters filters,
-    WidgetRef ref,
-    BuildContext context,
-  ) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.filter_alt_off, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'Aucune vente pour cette période',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Période: ${_getPeriodLabel(filters.period)}',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              ref.read(saleFiltersProvider.notifier).state = const SaleFilters();
-            },
-            icon: const Icon(Icons.clear),
-            label: const Text('Réinitialiser le filtre'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => showSaleFilterDialog(context),
-            icon: const Icon(Icons.filter_list),
-            label: const Text('Changer le filtre'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getPeriodLabel(String? period) {
-    switch (period) {
-      case 'day':
-        return 'Aujourd\'hui';
-      case 'week':
-        return 'Cette semaine';
-      case 'month':
-        return 'Ce mois';
-      case 'year':
-        return 'Cette année';
-      default:
-        return 'Sélectionnée';
-    }
   }
 
   Widget _buildEmptyState() {
@@ -196,8 +220,8 @@ class SaleScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Aucune vente',
-            style: TextStyle(fontSize: 20, color: Colors.grey.shade600),
+            'Aucune vente pour cette période',
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 8),
           Text(
@@ -209,12 +233,7 @@ class SaleScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTab(
-    BuildContext context,
-    WidgetRef ref,
-    String label,
-    int index,
-  ) {
+  Widget _buildTab(BuildContext context, WidgetRef ref, String label, int index) {
     final currentTab = ref.watch(saleTabProvider);
     final isSelected = currentTab == index;
 

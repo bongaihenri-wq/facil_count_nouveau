@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/expense_model.dart';
 import '../../data/repositories/expense_repository.dart';
 import '../../core/utils/business_helper.dart';
+import '/presentation/screens/dashboard/providers/dashboard_provider.dart';
+import '../screens/expenses/expense_screen.dart'; 
 
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
   return Supabase.instance.client;
@@ -19,15 +21,21 @@ final expenseFiltersProvider = StateProvider<ExpenseFilters>(
   (ref) => const ExpenseFilters(),
 );
 
-final filteredExpensesProvider = FutureProvider<List<ExpenseModel>>((
-  ref,
-) async {
+final filteredExpensesProvider = FutureProvider<List<ExpenseModel>>((ref) async {
   final repo = ref.watch(expenseRepositoryProvider);
   final filters = ref.watch(expenseFiltersProvider);
+  
+  // 1. On regarde sur quel écran se trouve l'utilisateur
+  final currentScreen = ref.watch(currentScreenProvider);
+  
+  // 2. On choisit dynamiquement la période
+  final currentPeriod = (currentScreen == 'dashboard')
+      ? ref.watch(selectedDashboardPeriodProvider) // Filtre du Dashboard
+      : ref.watch(selectedPeriodProvider);          // Filtre de l'écran Dépenses
 
   return repo.getExpenses(
-    startDate: filters.startDate,
-    endDate: filters.endDate,
+    startDate: currentPeriod.start, 
+    endDate: currentPeriod.end,    
     searchQuery: filters.searchQuery,
   );
 });

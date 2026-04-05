@@ -13,7 +13,11 @@ class SaleRepository {
   SaleRepository(this._client, this._businessHelper, this._ref);
 
   /// 🌐 EN LIGNE : Récupère toutes les ventes directement depuis Supabase
-  Future<List<SaleModel>> getSales() async {
+  // ⭐ MODIFIÉ : Ajout des paramètres de date optionnels
+  Future<List<SaleModel>> getSales({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     final businessId = await _businessHelper.getBusinessId();
     
     if (businessId.isEmpty) {
@@ -23,11 +27,25 @@ class SaleRepository {
 
     try {
       print('🌐 Supabase - Récupération des ventes en direct...');
-      final response = await _client
+      
+      // On commence à construire notre requête de base
+      var query = _client
           .from('sales')
           .select('*, products(name), clients(name)')
-          .eq('business_id', businessId)
-          .order('sale_date', ascending: false);
+          .eq('business_id', businessId);
+
+      // 📅 FILTRE : Date supérieure ou égale à startDate
+      if (startDate != null) {
+        query = query.gte('sale_date', startDate.toIso8601String());
+      }
+
+      // 📅 FILTRE : Date inférieure ou égale à endDate
+      if (endDate != null) {
+        query = query.lte('sale_date', endDate.toIso8601String());
+      }
+
+      // On applique le tri et on attend la réponse
+      final response = await query.order('sale_date', ascending: false);
 
       final List<dynamic> data = response as List<dynamic>;
       
@@ -89,14 +107,8 @@ class SaleRepository {
 
       print('✅ Vente enregistrée avec succès sur Supabase !');
 
-      // 🔥 AJOUT ICI : Rafraîchir l'écran
-      // On demande à Riverpod de recalculer/recharger la liste des produits et des stocks
-      // Remplace 'productsProvider' par le nom exact du provider que tu utilises pour lister tes produits !
       _ref.invalidate(productsProvider); 
       
-      // Si tu as aussi un provider pour la liste des ventes, tu peux l'invalider ici :
-      // _ref.invalidate(salesProvider);
-
       return SaleModel.fromJson(responseMap);
       
     } catch (e) {
@@ -136,20 +148,6 @@ class SaleRepository {
           .select('*, products(name)')
           .single();
 
-      // 🛑 SUPPRESSION DU DOUBLON : Supabase gère déjà la différence de stock lors d'un update.
-      /*
-      final oldSale = await _client
-          .from('sales')
-          .select('quantity')
-          .eq('id', id)
-          .single();
-      final oldQuantity = (oldSale['quantity'] as num).toInt();
-      final quantityDiff = quantity - oldQuantity;
-      if (quantityDiff != 0) {
-        await _updateProductStock(productId, -quantityDiff, businessId);
-      }
-      */
-
       final Map<String, dynamic> responseMap = Map<String, dynamic>.from(data);
       if (responseMap['products'] != null) {
         responseMap['product_name'] = responseMap['products']['name'];
@@ -172,9 +170,6 @@ class SaleRepository {
           .delete()
           .eq('id', id)
           .eq('business_id', businessId);
-
-      // 🛑 SUPPRESSION DU DOUBLON : Supabase recrédite déjà le stock lors d'un delete.
-      // await _updateProductStock(productId, quantity, businessId);
       
     } catch (e) {
       print('❌ ERREUR DELETE VENTE: $e');
@@ -182,8 +177,7 @@ class SaleRepository {
     }
   }
 
-  /// 🔄 Méthode conservée au cas où tu en aies besoin ailleurs,
-  /// mais elle n'est plus appelée lors des flux de ventes classiques.
+  /// 🔄 Méthode conservée au cas où tu en aies besoin ailleurs
   Future<void> _updateProductStock(String productId, int quantityDelta, String businessId) async {
     final product = await _client
         .from('products')

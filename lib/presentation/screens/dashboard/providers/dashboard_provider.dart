@@ -1,245 +1,129 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../../../core/utils/business_helper.dart';
+import '/../core/utils/date_filter_helper.dart';
+import '/presentation/providers/sale_provider.dart';
+import '/presentation/providers/purchase_provider.dart';
+import '/presentation/providers/expense_provider.dart'; // 🟢 Ajout de l'import pour les dépenses
 
-// ==================== MODELS ====================
+final currentScreenProvider = StateProvider<String>((ref) => 'dashboard');
+/// 🎯 1. Le provider d'état pour la période du Dashboard Global
+final selectedDashboardPeriodProvider = StateProvider<DateFilterRange>((ref) {
+  return DateFilterHelper.defaultRange();
+});
 
-class DashboardStats {
-  final double totalAchats;
+
+/// 📦 2. Modèle de données complet pour porter les états du Dashboard
+class DashboardGlobalData {
   final double totalVentes;
+  final double totalAchats;
   final double totalDepenses;
   final double marge;
-  final List<MonthlyData> monthlyEvolution;
-  final List<ProductSale> bestProducts;
-  final List<ProductSale> worstProducts;
-  final String period;
+  final List<Map<String, dynamic>> monthlyEvolution;
+  final List<Map<String, dynamic>> topProducts;
 
-  DashboardStats({
-    required this.totalAchats,
+  DashboardGlobalData({
     required this.totalVentes,
+    required this.totalAchats,
     required this.totalDepenses,
     required this.marge,
     required this.monthlyEvolution,
-    required this.bestProducts,
-    required this.worstProducts,
-    required this.period,
-  });
-
-  factory DashboardStats.empty() {
-    return DashboardStats(
-      totalAchats: 0,
-      totalVentes: 0,
-      totalDepenses: 0,
-      marge: 0,
-      monthlyEvolution: [],
-      bestProducts: [],
-      worstProducts: [],
-      period: 'Mois',
-    );
-  }
-
-  double get margePercent => totalVentes > 0 ? (marge / totalVentes) * 100 : 0;
-  bool get isProfitable => marge >= 0;
-}
-
-class MonthlyData {
-  final DateTime month;
-  final double achats;
-  final double ventes;
-  final double depenses;
-
-  MonthlyData({
-    required this.month,
-    required this.achats,
-    required this.ventes,
-    required this.depenses,
+    required this.topProducts,
   });
 }
 
-class ProductSale {
-  final String name;
-  final double quantity;
-  final double revenue;
-
-  ProductSale({
-    required this.name,
-    required this.quantity,
-    required this.revenue,
-  });
-}
-
-// ==================== PROVIDER ====================
-
-final dashboardProvider =
-    StateNotifierProvider<DashboardNotifier, AsyncValue<DashboardStats>>((ref) {
-      return DashboardNotifier(ref);
-    });
-
-class DashboardNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
-  final SupabaseClient supabase = Supabase.instance.client;
-  final Ref _ref;
-
-  DashboardNotifier(this._ref) : super(const AsyncValue.loading()) {
-    loadData('Mois');
+/// 🧮 3. Le Provider dérivé qui calcule tout à la volée !
+final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((ref) {
+  // On écoute l'état asynchrone des trois sources de données
+  final salesAsync = ref.watch(salesProvider);
+  final purchasesAsync = ref.watch(purchasesProvider);
+  final expensesAsync = ref.watch(filteredExpensesProvider); // 🟢 On écoute enfin les dépenses !
+  
+  // ⏳ Gestion des états de chargement
+  if (salesAsync is AsyncLoading || purchasesAsync is AsyncLoading || expensesAsync is AsyncLoading) {
+    return const AsyncLoading<DashboardGlobalData>();
+  }
+  
+  // ❌ Gestion des états d'erreur si un appel Supabase échoue
+  if (salesAsync is AsyncError) {
+    return AsyncError<DashboardGlobalData>(salesAsync.error!, salesAsync.stackTrace!);
+  }
+  if (purchasesAsync is AsyncError) {
+    return AsyncError<DashboardGlobalData>(purchasesAsync.error!, purchasesAsync.stackTrace!);
+  }
+  if (expensesAsync is AsyncError) {
+    return AsyncError<DashboardGlobalData>(expensesAsync.error!, expensesAsync.stackTrace!);
   }
 
-  Future<void> loadData(String period) async {
-    state = const AsyncValue.loading();
+  // 📦 Si tout est bon, on extrait les listes (ou une liste vide par défaut)
+  final sales = salesAsync.value ?? [];
+  final purchases = purchasesAsync.value ?? [];
+  final expenses = expensesAsync.value ?? []; // 🟢 Liste des dépenses extraite
 
-    try {
-      final now = DateTime.now();
-      DateTime? start;
-      DateTime end = now;
+  // ==========================================
+  // 📈 1️⃣ CALCUL DES TOTAUX (Pour les KPIs)
+  // ==========================================
+  final totalVentes = sales.fold<double>(0, (sum, item) => sum + item.amount);
+  final totalAchats = purchases.fold<double>(0, (sum, item) => sum + item.amount);
+  final totalDepenses = expenses.fold<double>(0, (sum, item) => sum + item.amount); // 🟢 Total dynamique calculé
 
-      switch (period) {
-        case 'Semaine':
-          start = now.subtract(Duration(days: now.weekday - 1));
-          break;
-        case 'Mois':
-          start = DateTime(now.year, now.month, 1);
-          break;
-        case 'Année':
-          start = DateTime(now.year, 1, 1);
-          break;
-      }
+  // ==========================================
+  // 📊 2️⃣ ÉVOLUTION MENSUELLE (Pour le graphique)
+  // ==========================================
+  final List<String> months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  final List<Map<String, dynamic>> monthlyEvolution = [];
 
-      final stats = await _fetchStats(start, end, period);
-      state = AsyncValue.data(stats);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
-  }
-
-  Future<DashboardStats> _fetchStats(
-    DateTime? start,
-    DateTime end,
-    String period,
-  ) async {
-    final businessId = await _ref.read(businessHelperProvider).getBusinessId(); // ← AJOUTÉ
+  for (int i = 0; i < months.length; i++) {
+    final monthIndex = i + 1;
     
-    final achats = await _getTotal('purchases', 'purchase_date', start, end, businessId); // ← AJOUTÉ businessId
-    final ventes = await _getTotal('sales', 'sale_date', start, end, businessId); // ← AJOUTÉ businessId
-    final depenses = await _getTotal('expenses', 'expenses_date', start, end, businessId); // ← AJOUTÉ businessId
+    final salesInMonth = sales
+        .where((s) => s.saleDate.month == monthIndex)
+        .fold<double>(0, (sum, item) => sum + item.amount);
+        
+    final purchasesInMonth = purchases
+        .where((p) => p.purchaseDate.month == monthIndex)
+        .fold<double>(0, (sum, item) => sum + item.amount);
 
-    final monthly = await _getMonthlyEvolution(businessId); // ← AJOUTÉ businessId
-    final products = await _getProductStats(start, end, businessId); // ← AJOUTÉ businessId
+    final expensesInMonth = expenses
+        .where((e) => e.expensesDate.month == monthIndex)
+        .fold<double>(0, (sum, item) => sum + item.amount); // 🟢 Dépenses par mois
 
-    return DashboardStats(
-      totalAchats: achats,
-      totalVentes: ventes,
-      totalDepenses: depenses,
-      marge: ventes - achats - depenses,
-      monthlyEvolution: monthly,
-      bestProducts: products['best'] ?? [],
-      worstProducts: products['worst'] ?? [],
-      period: period,
-    );
-  }
-
-  Future<double> _getTotal(
-    String table,
-    String dateCol,
-    DateTime? start,
-    DateTime? end,
-    String businessId, // ← AJOUTÉ
-  ) async {
-    var query = supabase.from(table).select('amount')
-        .eq('business_id', businessId); // ← AJOUTÉ
-    
-    if (start != null) query = query.gte(dateCol, start.toIso8601String());
-    if (end != null) query = query.lte(dateCol, end.toIso8601String());
-
-    final res = await query;
-    return (res as List).fold<double>(0.0, (sum, row) {
-      return sum + ((row['amount'] as num?)?.toDouble() ?? 0.0);
-    });
-  }
-
-  Future<List<MonthlyData>> _getMonthlyEvolution(String businessId) async { // ← AJOUTÉ businessId
-    final now = DateTime.now();
-    final List<MonthlyData> data = [];
-
-    for (int i = 11; i >= 0; i--) {
-      final monthStart = DateTime(now.year, now.month - i, 1);
-      final monthEnd = DateTime(now.year, now.month - i + 1, 0, 23, 59, 59);
-
-      final achats = await _getTotal(
-        'purchases',
-        'purchase_date',
-        monthStart,
-        monthEnd,
-        businessId, // ← AJOUTÉ
-      );
-      final ventes = await _getTotal(
-        'sales',
-        'sale_date',
-        monthStart,
-        monthEnd,
-        businessId, // ← AJOUTÉ
-      );
-      final depenses = await _getTotal(
-        'expenses',
-        'expenses_date',
-        monthStart,
-        monthEnd,
-        businessId, // ← AJOUTÉ
-      );
-
-      data.add(
-        MonthlyData(
-          month: monthStart,
-          achats: achats,
-          ventes: ventes,
-          depenses: depenses,
-        ),
-      );
+    // On ajoute le mois au graphique s'il y a eu la moindre activité
+    if (salesInMonth > 0 || purchasesInMonth > 0 || expensesInMonth > 0) {
+      monthlyEvolution.add({
+        'month': months[i],
+        'ventes': salesInMonth,
+        'achats': purchasesInMonth,
+        'depenses': expensesInMonth, // 🟢 Injecté pour le graph
+      });
     }
-    return data;
   }
 
-  Future<Map<String, List<ProductSale>>> _getProductStats(
-    DateTime? start,
-    DateTime? end,
-    String businessId, // ← AJOUTÉ
-  ) async {
-    var query = supabase
-        .from('sales')
-        .select('product_id, quantity, amount, products!inner(name)')
-        .eq('business_id', businessId); // ← AJOUTÉ
-
-    if (start != null) query = query.gte('sale_date', start.toIso8601String());
-    if (end != null) query = query.lte('sale_date', end.toIso8601String());
-
-    final res = await query;
-
-    final Map<String, ProductSale> salesMap = {};
-
-    for (final sale in res) {
-      final name = (sale['products'] as Map?)?['name'] as String? ?? 'Inconnu';
-      final qty = (sale['quantity'] as num?)?.toDouble() ?? 0.0;
-      final amount = (sale['amount'] as num?)?.toDouble() ?? 0.0;
-
-      final existing = salesMap[name];
-      salesMap[name] = ProductSale(
-        name: name,
-        quantity: (existing?.quantity ?? 0) + qty,
-        revenue: (existing?.revenue ?? 0) + amount,
-      );
-    }
-
-    final sorted = salesMap.values.toList()
-      ..sort((a, b) => b.quantity.compareTo(a.quantity));
-
-    return {
-      'best': sorted.take(5).toList(),
-      'worst': sorted.reversed.take(5).toList(),
-    };
+  // ==========================================
+  // 🏆 3️⃣ TOP 5 DES PRODUITS (Pour le Ranking)
+  // ==========================================
+  final Map<String, double> productSalesQuantities = {};
+  
+  for (var sale in sales) {
+    final prodName = sale.productName ?? 'Inconnu';
+    productSalesQuantities[prodName] = (productSalesQuantities[prodName] ?? 0) + sale.quantity;
   }
-}
 
-// ==================== HELPERS ====================
+  final topProducts = productSalesQuantities.entries
+      .map((e) => {'name': e.key, 'qty': e.value})
+      .toList()
+    ..sort((a, b) => (b['qty'] as double).compareTo(a['qty'] as double));
 
-String formatCFA(double amount) => Formatters.formatCurrency(amount);
-String formatNumber(int number) => Formatters.formatNumber(number);
+  final top5 = topProducts.take(5).toList();
+
+  // ==========================================
+  // 🚀 4️⃣ RETOUR DES DONNÉES ENVELOPPÉES DANS ASYNCDATA
+  // ==========================================
+  return AsyncData(DashboardGlobalData(
+    totalVentes: totalVentes,
+    totalAchats: totalAchats,
+    totalDepenses: totalDepenses,
+    // 🟢 Marge = Ventes - (Achats + Dépenses)
+    marge: totalVentes - (totalAchats + totalDepenses), 
+    monthlyEvolution: monthlyEvolution,
+    topProducts: top5,
+  ));
+});
