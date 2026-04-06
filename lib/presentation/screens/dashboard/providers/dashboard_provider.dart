@@ -2,14 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '/../core/utils/date_filter_helper.dart';
 import '/presentation/providers/sale_provider.dart';
 import '/presentation/providers/purchase_provider.dart';
-import '/presentation/providers/expense_provider.dart'; // 🟢 Ajout de l'import pour les dépenses
+import '/presentation/providers/expense_provider.dart';
 
 final currentScreenProvider = StateProvider<String>((ref) => 'dashboard');
+
 /// 🎯 1. Le provider d'état pour la période du Dashboard Global
 final selectedDashboardPeriodProvider = StateProvider<DateFilterRange>((ref) {
   return DateFilterHelper.defaultRange();
 });
-
 
 /// 📦 2. Modèle de données complet pour porter les états du Dashboard
 class DashboardGlobalData {
@@ -32,10 +32,15 @@ class DashboardGlobalData {
 
 /// 🧮 3. Le Provider dérivé qui calcule tout à la volée !
 final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((ref) {
-  // On écoute l'état asynchrone des trois sources de données
-  final salesAsync = ref.watch(salesProvider);
-  final purchasesAsync = ref.watch(purchasesProvider);
-  final expensesAsync = ref.watch(filteredExpensesProvider); // 🟢 On écoute enfin les dépenses !
+  
+  // 1️⃣ On écoute la période sélectionnée spécifiquement pour le Dashboard 🟢
+  // Cet objet est STABLE, Riverpod ne bouclera plus dessus.
+  final dashboardPeriodRange = ref.watch(selectedDashboardPeriodProvider);
+
+  // 2️⃣ On écoute directement avec l'objet fourni ! 🟢
+  final salesAsync = ref.watch(salesProvider(dashboardPeriodRange));
+  final purchasesAsync = ref.watch(purchasesProvider(dashboardPeriodRange));
+  final expensesAsync = ref.watch(filteredExpensesProvider(dashboardPeriodRange)); 
   
   // ⏳ Gestion des états de chargement
   if (salesAsync is AsyncLoading || purchasesAsync is AsyncLoading || expensesAsync is AsyncLoading) {
@@ -56,14 +61,14 @@ final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((r
   // 📦 Si tout est bon, on extrait les listes (ou une liste vide par défaut)
   final sales = salesAsync.value ?? [];
   final purchases = purchasesAsync.value ?? [];
-  final expenses = expensesAsync.value ?? []; // 🟢 Liste des dépenses extraite
+  final expenses = expensesAsync.value ?? []; 
 
   // ==========================================
   // 📈 1️⃣ CALCUL DES TOTAUX (Pour les KPIs)
   // ==========================================
   final totalVentes = sales.fold<double>(0, (sum, item) => sum + item.amount);
   final totalAchats = purchases.fold<double>(0, (sum, item) => sum + item.amount);
-  final totalDepenses = expenses.fold<double>(0, (sum, item) => sum + item.amount); // 🟢 Total dynamique calculé
+  final totalDepenses = expenses.fold<double>(0, (sum, item) => sum + item.amount); 
 
   // ==========================================
   // 📊 2️⃣ ÉVOLUTION MENSUELLE (Pour le graphique)
@@ -84,15 +89,14 @@ final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((r
 
     final expensesInMonth = expenses
         .where((e) => e.expensesDate.month == monthIndex)
-        .fold<double>(0, (sum, item) => sum + item.amount); // 🟢 Dépenses par mois
+        .fold<double>(0, (sum, item) => sum + item.amount); 
 
-    // On ajoute le mois au graphique s'il y a eu la moindre activité
     if (salesInMonth > 0 || purchasesInMonth > 0 || expensesInMonth > 0) {
       monthlyEvolution.add({
         'month': months[i],
         'ventes': salesInMonth,
         'achats': purchasesInMonth,
-        'depenses': expensesInMonth, // 🟢 Injecté pour le graph
+        'depenses': expensesInMonth, 
       });
     }
   }
@@ -121,7 +125,6 @@ final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((r
     totalVentes: totalVentes,
     totalAchats: totalAchats,
     totalDepenses: totalDepenses,
-    // 🟢 Marge = Ventes - (Achats + Dépenses)
     marge: totalVentes - (totalAchats + totalDepenses), 
     monthlyEvolution: monthlyEvolution,
     topProducts: top5,

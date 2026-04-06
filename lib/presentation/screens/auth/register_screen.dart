@@ -295,7 +295,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             }
           },
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 40),
         
         // Bouton continuer
         Container(

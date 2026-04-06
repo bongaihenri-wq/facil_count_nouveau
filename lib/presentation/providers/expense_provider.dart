@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/expense_model.dart';
 import '../../data/repositories/expense_repository.dart';
 import '../../core/utils/business_helper.dart';
+import '../../core/utils/date_filter_helper.dart'; // 🟢 Pour le type DateFilter
 import '/presentation/screens/dashboard/providers/dashboard_provider.dart';
 import '../screens/expenses/expense_screen.dart'; 
 
@@ -16,26 +17,24 @@ final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
   return ExpenseRepository(client, businessHelper);
 });
 
-// Filtres
+// Filtres textuels (Mise en mémoire)
 final expenseFiltersProvider = StateProvider<ExpenseFilters>(
   (ref) => const ExpenseFilters(),
 );
 
-final filteredExpensesProvider = FutureProvider<List<ExpenseModel>>((ref) async {
+// 🟢 Provider des dépenses (Devenu indépendant avec .family !)
+// Il prend un objet DateFilter en paramètre.
+final filteredExpensesProvider = FutureProvider.family<List<ExpenseModel>, DateFilterRange>((ref, period) async {
   final repo = ref.watch(expenseRepositoryProvider);
   final filters = ref.watch(expenseFiltersProvider);
   
-  // 1. On regarde sur quel écran se trouve l'utilisateur
-  final currentScreen = ref.watch(currentScreenProvider);
-  
-  // 2. On choisit dynamiquement la période
-  final currentPeriod = (currentScreen == 'dashboard')
-      ? ref.watch(selectedDashboardPeriodProvider) // Filtre du Dashboard
-      : ref.watch(selectedPeriodProvider);          // Filtre de l'écran Dépenses
+  print('🛰️ Provider Dépenses - Récupération autonome via .family');
+  print('📅 Dates envoyées à Supabase : ${period.start} au ${period.end}');
 
+  // On injecte les dates issues directement du paramètre 'period' !
   return repo.getExpenses(
-    startDate: currentPeriod.start, 
-    endDate: currentPeriod.end,    
+    startDate: period.start, 
+    endDate: period.end,    
     searchQuery: filters.searchQuery,
   );
 });

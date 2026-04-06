@@ -22,7 +22,7 @@ class ExpenseScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tabIndex = ref.watch(expenseTabProvider);
     final currentPeriod = ref.watch(selectedPeriodProvider);
-    final expensesAsync = ref.watch(filteredExpensesProvider);
+    final expensesAsync = ref.watch(filteredExpensesProvider(currentPeriod));
 
     return Scaffold(
       // 🏷️ 1. APP BAR

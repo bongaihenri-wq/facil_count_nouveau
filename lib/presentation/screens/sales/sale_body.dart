@@ -1,44 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../providers/sale_provider.dart';
 import '../../../data/models/sale_model.dart';
-import 'widgets/sale_list.dart';
-import 'widgets/sale_dashboard.dart';
-import 'dialogs/add_sale_dialog.dart';
-import 'dialogs/filter_dialog.dart';
+import '../../providers/sale_provider.dart';
+import '../sales/widgets/sale_list.dart';
+import '../sales/widgets/sale_dashboard.dart';
+import '../../screens/sales/sale_screen.dart'; // Nécessaire pour selectedSalePeriodProvider
 
 class SaleBody extends ConsumerWidget {
   const SaleBody({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final salesAsync = ref.watch(salesProvider);
-    final filteredSales = ref.watch(filteredSalesProvider);
+    // 1. On récupère la période sélectionnée pour l'écran des ventes 🟢
+    final currentSalePeriod = ref.watch(selectedSalePeriodProvider);
+
+    // 2. On passe cette période au provider (Fini le cast sauvage !) 🟢
+    final salesAsync = ref.watch(salesProvider(currentSalePeriod));
+    
     final selectedTab = ref.watch(saleTabProvider);
     final filters = ref.watch(saleFiltersProvider);
 
     return salesAsync.when(
-      data: (_) => Column(
-        children: [
-          // TABS
-          Container(
-            color: Colors.green.shade50,
-            child: Row(
-              children: [
-                _buildTab(context, ref, 'Liste', 0),
-                _buildTab(context, ref, 'Dashboard', 1),
-              ],
+      data: (allSales) {
+        // 🟢 Filtrage sécurisé en mémoire sans passer par des IDs externes
+        final filteredSales = !filters.isActive 
+            ? allSales 
+            : allSales.where((sale) {
+                if (filters.productId != null && sale.productId != filters.productId) return false;
+                if (filters.clientId != null && !(sale.customer?.toLowerCase().contains(filters.clientId!.toLowerCase()) ?? false)) return false;
+                return true;
+              }).toList();
+
+        return Column(
+          children: [
+            // Onglets Liste / Dashboard
+            Container(
+              color: Colors.green.shade50,
+              child: Row(
+                children: [
+                  _buildTab(context, ref, 'Liste', 0),
+                  _buildTab(context, ref, 'Dashboard', 1),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: selectedTab == 0
-                ? _buildListContent(filteredSales, filters, ref, context)
-                : _buildDashboardContent(filteredSales),
-          ),
-        ],
-      ),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Erreur: $err')),
+            Expanded(
+              child: selectedTab == 0
+                  ? _buildListContent(filteredSales, filters, ref, context)
+                  : _buildDashboardContent(filteredSales),
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator(color: Colors.green)),
+      error: (err, _) => Center(child: Text('Erreur: $err', style: const TextStyle(color: Colors.red))),
     );
   }
 
@@ -48,10 +62,6 @@ class SaleBody extends ConsumerWidget {
     WidgetRef ref,
     BuildContext context,
   ) {
-    if (sales.isEmpty && filters.isActive) {
-      return _buildEmptyFilterState(filters, ref, context);
-    }
-
     if (sales.isEmpty) {
       return _buildEmptyState();
     }
@@ -62,9 +72,7 @@ class SaleBody extends ConsumerWidget {
     );
   }
 
-  Widget _buildDashboardContent(
-    List<SaleModel> sales,
-  ) {
+  Widget _buildDashboardContent(List<SaleModel> sales) {
     if (sales.isEmpty) {
       return _buildEmptyState();
     }
@@ -73,64 +81,6 @@ class SaleBody extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 80),
       child: SaleDashboard(sales: sales),
     );
-  }
-
-  Widget _buildEmptyFilterState(
-    SaleFilters filters,
-    WidgetRef ref,
-    BuildContext context,
-  ) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.filter_alt_off, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'Aucune vente pour cette période',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Période: ${_getPeriodLabel(filters.period)}',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              ref.read(saleFiltersProvider.notifier).state = SaleFilters();
-            },
-            icon: const Icon(Icons.clear),
-            label: const Text('Réinitialiser le filtre'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => showSaleFilterDialog(context),
-            icon: const Icon(Icons.filter_list),
-            label: const Text('Changer le filtre'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getPeriodLabel(String? period) {
-    switch (period) {
-      case 'day':
-        return 'Aujourd\'hui';
-      case 'week':
-        return 'Cette semaine';
-      case 'month':
-        return 'Ce mois';
-      case 'year':
-        return 'Cette année';
-      default:
-        return 'Sélectionnée';
-    }
   }
 
   Widget _buildEmptyState() {
@@ -145,7 +95,7 @@ class SaleBody extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Aucune vente',
+            'Aucune vente effectuée',
             style: TextStyle(fontSize: 20, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 8),
@@ -158,12 +108,7 @@ class SaleBody extends ConsumerWidget {
     );
   }
 
-  Widget _buildTab(
-    BuildContext context,
-    WidgetRef ref,
-    String label,
-    int index,
-  ) {
+  Widget _buildTab(BuildContext context, WidgetRef ref, String label, int index) {
     final currentTab = ref.watch(saleTabProvider);
     final isSelected = currentTab == index;
 

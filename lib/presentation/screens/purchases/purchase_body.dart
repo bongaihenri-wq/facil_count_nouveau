@@ -4,7 +4,7 @@ import '../../providers/purchase_provider.dart';
 import '../../../data/models/purchase_model.dart';
 import '../purchases/purchase_list.dart';
 import '../purchases/purchase_dashboard.dart';
-import 'dialogs/add_purchase_dialog.dart';
+import '../../screens/purchases/purchase_screen.dart'; // Importation nécessaire pour selectedPurchasePeriodProvider
 import 'dialogs/filter_purchase_dialog.dart';
 
 class PurchaseBody extends ConsumerWidget {
@@ -12,33 +12,48 @@ class PurchaseBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final purchasesAsync = ref.watch(purchasesProvider);
-    final filteredPurchases = ref.watch(filteredPurchasesProvider);
+    // 1. On écoute d'abord la période sélectionnée pour les achats 🟢
+    final currentPurchasePeriod = ref.watch(selectedPurchasePeriodProvider);
+    
+    // 2. On écoute le provider asynchrone brut en lui passant la période 🟢
+    final purchasesAsync = ref.watch(purchasesProvider(currentPurchasePeriod));
+    
     final selectedTab = ref.watch(purchaseTabProvider);
     final filters = ref.watch(purchaseFiltersProvider);
 
     return purchasesAsync.when(
-      data: (_) => Column(
-        children: [
-          // TABS
-          Container(
-            color: Colors.blue.shade50,
-            child: Row(
-              children: [
-                _buildTab(context, ref, 'Liste', 0),
-                _buildTab(context, ref, 'Dashboard', 1),
-              ],
+      data: (allPurchases) {
+        // 🟢 On applique les filtres en mémoire ici aussi
+        final filteredPurchases = !filters.isActive 
+            ? allPurchases 
+            : allPurchases.where((purchase) {
+                if (filters.productId != null && purchase.productId != filters.productId) return false;
+                if (filters.supplierId != null && !(purchase.supplier?.toLowerCase().contains(filters.supplierId!.toLowerCase()) ?? false)) return false;
+                return true;
+              }).toList();
+
+        return Column(
+          children: [
+            // TABS
+            Container(
+              color: Colors.blue.shade50,
+              child: Row(
+                children: [
+                  _buildTab(context, ref, 'Liste', 0),
+                  _buildTab(context, ref, 'Dashboard', 1),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: selectedTab == 0
-                ? _buildListContent(filteredPurchases, filters, ref, context)
-                : _buildDashboardContent(filteredPurchases),
-          ),
-        ],
-      ),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Erreur: $err')),
+            Expanded(
+              child: selectedTab == 0
+                  ? _buildListContent(filteredPurchases, filters, ref, context)
+                  : _buildDashboardContent(filteredPurchases),
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator(color: Colors.blue)),
+      error: (err, _) => Center(child: Text('Erreur: $err', style: const TextStyle(color: Colors.red))),
     );
   }
 
@@ -62,9 +77,7 @@ class PurchaseBody extends ConsumerWidget {
     );
   }
 
-  Widget _buildDashboardContent(
-    List<PurchaseModel> purchases,
-  ) {
+  Widget _buildDashboardContent(List<PurchaseModel> purchases) {
     if (purchases.isEmpty) {
       return _buildEmptyState();
     }
@@ -158,12 +171,7 @@ class PurchaseBody extends ConsumerWidget {
     );
   }
 
-  Widget _buildTab(
-    BuildContext context,
-    WidgetRef ref,
-    String label,
-    int index,
-  ) {
+  Widget _buildTab(BuildContext context, WidgetRef ref, String label, int index) {
     final currentTab = ref.watch(purchaseTabProvider);
     final isSelected = currentTab == index;
 

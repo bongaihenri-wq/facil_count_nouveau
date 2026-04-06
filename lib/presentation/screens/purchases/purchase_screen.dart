@@ -6,7 +6,6 @@ import '../../../core/utils/formatters.dart';
 import '../../providers/purchase_provider.dart';
 import '../../../data/models/purchase_model.dart';
 import '../purchases/purchase_list.dart';
-// 1. On décommente l'import du dashboard puisqu'il est créé !
 import '/presentation/screens/purchases/purchase_dashboard.dart'; 
 import '../purchases/dialogs/add_purchase_dialog.dart'; 
 
@@ -20,15 +19,14 @@ class PurchaseScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 2. On écoute le provider brut des achats pour le chargement/erreur
-    final purchasesAsync = ref.watch(purchasesProvider);
+    // 1. On écoute d'abord la période sélectionnée 🟢
+    final currentPurchasePeriod = ref.watch(selectedPurchasePeriodProvider);
     
-    // On écoute la liste filtrée en mémoire (produits, fournisseurs) pour l'affichage
-    final filteredPurchases = ref.watch(filteredPurchasesProvider);
+    // 2. On passe cette période au provider pour l'état asynchrone 🟢
+    final purchasesAsync = ref.watch(purchasesProvider(currentPurchasePeriod));
     
     final selectedTab = ref.watch(purchaseTabProvider);
     final filters = ref.watch(purchaseFiltersProvider);
-    final currentPeriod = ref.watch(selectedPurchasePeriodProvider);
 
     // Couleur thématique passée en bleu comme convenu pour les achats
     final themeColor = Colors.blue.shade700;  
@@ -71,58 +69,69 @@ class PurchaseScreen extends ConsumerWidget {
       // 🛠️ CORPS DE L'ÉCRAN (Branché sur les états Supabase)
       body: purchasesAsync.when(
         // Cas 1 : Données chargées avec succès !
-        data: (_) => Column(
-          children: [
-            // 📅 FILTRE PÉRIODE
-            GestureDetector(
-              onTap: () => _showPeriodPicker(context, ref),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                color: Colors.white,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.calendar_month, size: 18, color: themeColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      currentPeriod.label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: themeColor,
+        data: (allPurchases) {
+          // 🟢 On applique les filtres secondaires ici à la volée sur la liste brute
+          final purchases = !filters.isActive 
+              ? allPurchases 
+              : allPurchases.where((purchase) {
+                  if (filters.productId != null && purchase.productId != filters.productId) return false;
+                  if (filters.supplierId != null && !(purchase.supplier?.toLowerCase().contains(filters.supplierId!.toLowerCase()) ?? false)) return false;
+                  return true;
+                }).toList();
+
+          return Column(
+            children: [
+              // 📅 FILTRE PÉRIODE
+              GestureDetector(
+                onTap: () => _showPeriodPicker(context, ref),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  color: Colors.white,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.calendar_month, size: 18, color: themeColor),
+                      const SizedBox(width: 8),
+                      Text(
+                        currentPurchasePeriod.label,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: themeColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(Icons.arrow_drop_down, size: 20, color: themeColor),
+                      const SizedBox(width: 4),
+                      Icon(Icons.arrow_drop_down, size: 20, color: themeColor),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+
+              // 🗂️ SÉLECTION LISTE / DASHBOARD
+              Container(
+                color: Colors.blue.shade50, 
+                child: Row(
+                  children: [
+                    _buildTab(context, ref, 'Liste', 0, themeColor),
+                    _buildTab(context, ref, 'Dashboard', 1, themeColor),
                   ],
                 ),
               ),
-            ),
-            const Divider(height: 1),
 
-            // 🗂️ SÉLECTION LISTE / DASHBOARD
-            Container(
-              color: Colors.blue.shade50, // Passé en bleu pour harmoniser
-              child: Row(
-                children: [
-                  _buildTab(context, ref, 'Liste', 0, themeColor),
-                  _buildTab(context, ref, 'Dashboard', 1, themeColor),
-                ],
+              // 💰 TOTAL ACHATS ÉPURÉ
+              _buildTotalCard(purchases, themeColor),
+
+              // 📝 CONTENU DYNAMIQUE SELON L'ONGLET
+              Expanded(
+                child: selectedTab == 0
+                    ? _buildListContent(purchases)
+                    : PurchaseDashboard(purchases: purchases), 
               ),
-            ),
-
-            // 💰 TOTAL ACHATS ÉPURÉ
-            _buildTotalCard(filteredPurchases, themeColor),
-
-            // 📝 CONTENU DYNAMIQUE SELON L'ONGLET
-            Expanded(
-              child: selectedTab == 0
-                  ? _buildListContent(filteredPurchases)
-                  : PurchaseDashboard(purchases: filteredPurchases), // 🟢 Vrai Dashboard branché !
-            ),
-          ],
-        ),
+            ],
+          );
+        },
         
         // Cas 2 : C'est en train de charger depuis Supabase
         loading: () => const Center(
@@ -257,7 +266,6 @@ class PurchaseScreen extends ConsumerWidget {
               bottom: BorderSide(
                 color: isSelected ? themeColor : Colors.transparent,
                 width: 3,
-                // height: 0, // Inutile ici mais laissé propre
               ),
             ),
           ),

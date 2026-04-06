@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 // Si ton écran de caisse a aussi migré, adapte ce chemin comme pour le stock !
-import 'package:facil_count_nouveau/screens/cashs_screen_old.dart'; 
-import '../../stock/stock_screen.dart';
+import '/presentation/screens/cash/cash_screen.dart'; 
+import '/presentation/screens/stock/stock_screen.dart';
 
 class QuickActions extends StatelessWidget {
   const QuickActions({super.key});

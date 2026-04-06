@@ -21,7 +21,8 @@ class SaleScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final salesAsync = ref.watch(salesProvider);
+    final currentSalePeriod = ref.watch(selectedSalePeriodProvider);
+    final salesAsync = ref.watch(salesProvider(currentSalePeriod));
     final filteredSales = ref.watch(filteredSalesProvider);
     final selectedTab = ref.watch(saleTabProvider);
     final filters = ref.watch(saleFiltersProvider);

@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/sale_model.dart'; 
 import '../../data/repositories/sale_repository.dart'; 
 import '../../core/utils/business_helper.dart';
-import '../../core/utils/date_filter_helper.dart'; // 🟢 Pour le calcul des dates
+import '../../core/utils/date_filter_helper.dart'; 
 import '../screens/sales/sale_screen.dart';
 import '/presentation/screens/dashboard/providers/dashboard_provider.dart';
 
@@ -15,27 +15,20 @@ final saleRepositoryProvider = Provider<SaleRepository>((ref) {
   return SaleRepository(client, businessHelper, ref);
 });
 
-// 2. Provider de la liste brute des ventes (Filtrée par date via Supabase)
-// 2. Provider de la liste brute des ventes (Intelligent et Polymorphe)
-final salesProvider = FutureProvider<List<SaleModel>>((ref) async {
+// 2. Provider de la liste brute des ventes (Devenu indépendant grâce à .family !) 🟢
+// On lui passe un objet DateFilter (qui contient un .start et un .end)
+final salesProvider = FutureProvider.family<List<SaleModel>, DateFilterRange>((ref, period) async {
   final repo = ref.watch(saleRepositoryProvider);
   
-  // 1. On regarde sur quel écran se trouve l'utilisateur
-  final currentScreen = ref.watch(currentScreenProvider);
-  
-  // 2. On choisit dynamiquement la période à écouter !
-  final currentPeriod = (currentScreen == 'dashboard')
-      ? ref.watch(selectedDashboardPeriodProvider) // Filtre du Dashboard
-      : ref.watch(selectedSalePeriodProvider);      // Filtre de l'écran Ventes
-  
-  print('🛰️ Provider Ventes - Écran actif : $currentScreen');
-  print('📅 Dates envoyées à Supabase : ${currentPeriod.start} au ${currentPeriod.end}');
+  print('🛰️ Provider Ventes - Récupération autonome via .family');
+  print('📅 Dates envoyées à Supabase : ${period.start} au ${period.end}');
   
   return repo.getSales(
-    startDate: currentPeriod.start,
-    endDate: currentPeriod.end,
+    startDate: period.start,
+    endDate: period.end,
   );
 });
+
 /// 3. Notifier pour gérer les actions d'écriture (Create, Update, Delete)
 class SaleNotifier extends StateNotifier<AsyncValue<void>> {
   final SaleRepository _repo;
@@ -189,9 +182,13 @@ final saleFiltersProvider =
       return SaleFiltersNotifier();
     });
 
-/// 5. Le Provider dérivé qui applique les filtres en mémoire (Clients, Produits...)
+/// 5. Le Provider dérivé qui applique les filtres en mémoire (Clients, Produits...) 🟢
 final filteredSalesProvider = Provider<List<SaleModel>>((ref) {
-  final allSales = ref.watch(salesProvider).valueOrNull ?? [];
+  // 1. On écoute la période PROPRE à l'écran des ventes
+  final currentSalePeriod = ref.watch(selectedSalePeriodProvider);
+  
+  // 2. On passe cette période au provider brut avec .family
+  final allSales = ref.watch(salesProvider(currentSalePeriod)).valueOrNull ?? [];
   final filters = ref.watch(saleFiltersProvider);
 
   print('Filtres Ventes actifs: ${filters.isActive}');

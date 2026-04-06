@@ -4,8 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/purchase_model.dart'; 
 import '../../data/repositories/purchase_repository.dart'; 
 import '../../core/utils/business_helper.dart';
-import '../../core/utils/date_filter_helper.dart'; // 🟢 Pour le calcul des dates
-import '../screens/purchases/purchase_screen.dart'; // 🟢 Pour écouter la période sélectionnée
+import '/../core/utils/date_filter_helper.dart'; 
+import '../screens/purchases/purchase_screen.dart'; 
 import '/presentation/screens/dashboard/providers/dashboard_provider.dart';
 
 /// 1. Provider du Repository
@@ -15,25 +15,16 @@ final purchaseRepositoryProvider = Provider<PurchaseRepository>((ref) {
   return PurchaseRepository(client, businessHelper, ref);
 });
 
-// 2. Provider de la liste brute des achats (Filtrée par date via Supabase)
-final purchasesProvider = FutureProvider<List<PurchaseModel>>((ref) async {
+// 2. Provider de la liste brute des achats (Devenu indépendant avec .family) 🟢
+final purchasesProvider = FutureProvider.family<List<PurchaseModel>, DateFilterRange>((ref, period) async {
   final repo = ref.watch(purchaseRepositoryProvider);
   
-  // 1. 🧭 On regarde sur quel écran se trouve l'utilisateur
-  final currentScreen = ref.watch(currentScreenProvider);
+  print('🛰️ Provider Achats - Récupération autonome via .family');
+  print('📅 Dates envoyées à Supabase : ${period.start} au ${period.end}');
   
-  // 2. 🎯 On choisit dynamiquement la période à écouter !
-  final currentPeriod = (currentScreen == 'dashboard')
-      ? ref.watch(selectedDashboardPeriodProvider) // Filtre du Dashboard
-      : ref.watch(selectedPurchasePeriodProvider);  // Filtre de l'écran Achats
-  
-  print('🛰️ Provider Achats - Écran actif : $currentScreen');
-  print('📅 Dates envoyées à Supabase : ${currentPeriod.start} au ${currentPeriod.end}');
-  
-  // 📥 On passe directement les dates stockées dans l'état de la période !
   return repo.getPurchases(
-    startDate: currentPeriod.start,
-    endDate: currentPeriod.end,
+    startDate: period.start,
+    endDate: period.end,
   );
 });
 
@@ -188,9 +179,13 @@ final purchaseFiltersProvider =
       return PurchaseFiltersNotifier();
     });
 
-/// 5. Le Provider dérivé qui applique les filtres en mémoire (Fournisseurs, Produits...)
+/// 5. Le Provider dérivé qui applique les filtres en mémoire (Fournisseurs, Produits...) 🟢
 final filteredPurchasesProvider = Provider<List<PurchaseModel>>((ref) {
-  final allPurchases = ref.watch(purchasesProvider).valueOrNull ?? [];
+  // 1. On écoute la période PROPRE à l'écran des achats
+  final currentPurchasePeriod = ref.watch(selectedPurchasePeriodProvider);
+
+  // 2. On passe cette période au provider brut avec .family
+  final allPurchases = ref.watch(purchasesProvider(currentPurchasePeriod)).valueOrNull ?? [];
   final filters = ref.watch(purchaseFiltersProvider);
 
   print('Filtres Achats actifs: ${filters.isActive}');
