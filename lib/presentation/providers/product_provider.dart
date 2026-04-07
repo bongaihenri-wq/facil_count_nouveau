@@ -71,7 +71,19 @@ class ProductNotifier extends StateNotifier<AsyncValue<void>> {
       state = const AsyncValue.data(null);
     } catch (e, st) { state = AsyncValue.error(e, st); }
   }
+  Future<void> updateStockValue(String id, int newStock) async {
+    state = const AsyncValue.loading();
+    try {
+      // On appelle le repo pour mettre à jour uniquement le stock
+      await _repo.updateProductStock(id, newStock); 
+      state = const AsyncValue.data(null);
+    } catch (e, st) { 
+      state = AsyncValue.error(e, st); 
+    }
+  }
+
 }
+
 
 final productNotifierProvider = StateNotifierProvider<ProductNotifier, AsyncValue<void>>((ref) {
   return ProductNotifier(ref.watch(productRepositoryProvider));
@@ -130,7 +142,6 @@ class ProductActions {
     );
     _ref.invalidate(productsProvider);
   }
-
   Future<void> deleteProduct(String id) async {
     final notifier = _ref.read(productNotifierProvider.notifier);
     await notifier.deleteProduct(id);
@@ -138,6 +149,12 @@ class ProductActions {
   }
 
   Future<void> updateStock(String productId, int newStock) async {
+    final notifier = _ref.read(productNotifierProvider.notifier);
+    
+    // 1. On envoie la mise à jour réelle à Supabase via le notifier
+    await notifier.updateStockValue(productId, newStock);
+    
+    // 2. On invalide pour forcer le rafraîchissement global
     _ref.invalidate(productsProvider);
   }
 }

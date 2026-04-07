@@ -371,14 +371,16 @@ class _ProductStockCard extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Stock actuel: ${product.currentStock}'),
+            Text('Stock actuel : ${product.currentStock}'),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
               keyboardType: TextInputType.number,
+              autofocus: true, // Le clavier s'ouvre direct
               decoration: const InputDecoration(
-                labelText: 'Nouvelle quantité',
+                labelText: 'Nouvelle quantité physique',
                 border: OutlineInputBorder(),
+                suffixText: 'unités',
               ),
             ),
           ],
@@ -389,26 +391,40 @@ class _ProductStockCard extends ConsumerWidget {
             child: const Text('Annuler'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final newStock =
-                  int.tryParse(controller.text) ?? product.currentStock;
-              await ref
-                  .read(productActionsProvider)
-                  .updateStock(product.id, newStock);
-              Navigator.pop(context);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Stock mis à jour: ${product.name} = $newStock',
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange.shade700,
+              foregroundColor: Colors.white,
             ),
+            onPressed: () async {
+              final newStockValue = int.tryParse(controller.text);
+              
+              if (newStockValue != null) {
+                try {
+                  // 1. Mise à jour en base de données
+                  await ref.read(productActionsProvider).updateStock(product.id, newStockValue);
+
+                  // 2. 🟢 ON FORCE LA MISE À JOUR DE L'INTERFACE ICI
+                  ref.invalidate(filteredStockProvider); // Rafraîchit la liste
+                  ref.invalidate(stockStatsProvider);    // Rafraîchit les compteurs (Bas, OK, etc.)
+
+                  if (context.mounted) {
+                    Navigator.pop(context); // Ferme le dialogue
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Stock mis à jour pour ${product.name}'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              }
+            },
             child: const Text('Sauvegarder'),
           ),
         ],

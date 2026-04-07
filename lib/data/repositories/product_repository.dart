@@ -143,4 +143,14 @@ class ProductRepository {
       'initial_stock': newStock,
     }).eq('id', productId);
   }
+  Future<void> updateProductStock(String id, int newStock) async {
+  await _client
+      .from('products')
+      .update({
+        'initial_stock': newStock, // On définit le nouveau point de référence
+        'current_stock': newStock, // On aligne le stock actuel
+      })
+      .eq('id', id);
+}
+
 }
