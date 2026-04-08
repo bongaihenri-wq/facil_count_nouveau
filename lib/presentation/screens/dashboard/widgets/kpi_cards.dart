@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../dashboard/providers/dashboard_provider.dart'; // Pour DashboardGlobalData
+import '/../core/utils/formatters.dart';
 
 class KPICards extends StatelessWidget {
   final DashboardGlobalData stats; // 👈 AJOUTÉ ICI
@@ -10,11 +11,11 @@ class KPICards extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _buildStatCard('Ventes', '${stats.totalVentes.toInt()} FCFA', Colors.green),
+        _buildStatCard('Ventes', '${Formatters.formatCurrency(stats.totalVentes)} FCFA', Colors.green),
         const SizedBox(width: 12),
-        _buildStatCard('Achats', '${stats.totalAchats.toInt()} FCFA', Colors.orange),
+        _buildStatCard('Achats', '${Formatters.formatCurrency(stats.totalAchats)} FCFA', Colors.orange),
         const SizedBox(width: 12),
-        _buildStatCard('Dépenses', '${stats.totalDepenses.toInt()} FCFA', Colors.grey),
+        _buildStatCard('Dépenses', '${Formatters.formatCurrency(stats.totalDepenses)} FCFA', Colors.grey),
       ],
     );
   }

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/product_model.dart';
 import '../../core/utils/business_helper.dart';
-
 // On importe notre repository local tout frais
 import '../../data/repositories/product_repository_local.dart';
 

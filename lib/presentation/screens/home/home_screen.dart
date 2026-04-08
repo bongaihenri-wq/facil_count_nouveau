@@ -267,11 +267,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget? _buildFloatingActionButton() {
     if (_currentIndex == 0) {
       return FloatingActionButton.extended(
-        backgroundColor: Colors.green[700],
+        backgroundColor: const Color.fromARGB(255, 183, 247, 187),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
           'Ajouter',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Color.fromARGB(255, 20, 20, 20)),
         ),
         onPressed: () => _showQuickAddSheet(context),
       );

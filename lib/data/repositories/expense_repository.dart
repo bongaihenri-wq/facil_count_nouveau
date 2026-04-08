@@ -68,7 +68,7 @@ class ExpenseRepository {
         .select()
         .single();
 
-    return ExpenseModel.fromJson(data as Map<String, dynamic>);
+    return ExpenseModel.fromJson(data);
   }
 
   Future<ExpenseModel> updateExpense(
@@ -108,4 +108,23 @@ class ExpenseRepository {
     });
     return response as Map<String, dynamic>;
   }
+ Future<List<String>> getAllExpenseNames() async {
+  // 1. AJOUTE le await ici si getBusinessId renvoie un Future
+  // Si getBusinessId() n'est pas asynchrone, vérifie qu'il ne renvoie pas un Future par erreur
+  final businessId = await _businessHelper.getBusinessId(); 
+  
+  print('🔎 Recherche pour businessId: $businessId'); // Ici tu devrais voir le vrai UUID, plus "Instance of..."
+
+  final response = await _client
+      .from('expenses')
+      .select('name')
+      .eq('business_id', businessId); // Maintenant businessId sera un vrai String UUID
+
+  final List<dynamic> data = response as List<dynamic>;
+  return data
+      .map((item) => item['name'] as String)
+      .where((name) => name.isNotEmpty)
+      .toSet()
+      .toList();
+}
 }

@@ -17,7 +17,7 @@ class QuickAddSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.shade300,
+              color: const Color.fromARGB(185, 203, 231, 207),
               borderRadius: BorderRadius.circular(2),
             ),
           ),

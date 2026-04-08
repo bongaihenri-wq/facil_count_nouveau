@@ -6,7 +6,7 @@ import '../../data/repositories/sale_repository.dart';
 import '../../core/utils/business_helper.dart';
 import '../../core/utils/date_filter_helper.dart'; 
 import '../screens/sales/sale_screen.dart';
-import '/presentation/screens/dashboard/providers/dashboard_provider.dart';
+
 
 /// 1. Provider du Repository
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {

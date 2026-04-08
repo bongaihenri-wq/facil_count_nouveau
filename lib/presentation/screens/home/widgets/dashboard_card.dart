@@ -1,384 +1,177 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/formatters.dart';
+
+// Imports des modèles avec gestion du conflit de nom
+import '/../data/models/date_filter.dart' hide DashboardDateRange; 
+import '/../../data/models/dashboard_date_range.dart';
+
+// Import des providers
 import '../../../providers/sale_provider.dart';
 import '../../../providers/purchase_provider.dart';
+import '../../../providers/expense_provider.dart';
 import '../../dashboard/dashboard_screen.dart';
 
-// Provider pour le mois sélectionné
-final selectedMonthProvider = StateProvider<DateTime>((ref) {
-  return DateTime.now();
-});
+/// Stocke le mois sélectionné par l'utilisateur
+final selectedMonthProvider = StateProvider<DateTime>((ref) => DateTime.now());
 
-// Provider des stats adapté au mois sélectionné
-final selectedMonthStatsProvider = Provider<MonthStats>((ref) {
-  final sales = ref.watch(filteredSalesProvider);
-  final purchases = ref.watch(filteredPurchasesProvider);
+/// Calcule les statistiques pour le Dashboard
+final selectedMonthStatsProvider = FutureProvider<MonthStats>((ref) async {
   final selectedMonth = ref.watch(selectedMonthProvider);
+
+  // 1. On crée le filtre couvrant le mois actuel et le précédent
+  final dashboardRange = DashboardDateRange.forComparison(selectedMonth);
   
-  final currentMonth = DateTime(selectedMonth.year, selectedMonth.month);
-  final prevMonth = DateTime(selectedMonth.year, selectedMonth.month - 1);
+  // Utilisation de la méthode de conversion pour satisfaire les providers family
+  final filterForProviders = dashboardRange.toDateFilterRange();
 
-  final currentMonthSales = sales
-      .where((s) => s.saleDate.year == currentMonth.year && s.saleDate.month == currentMonth.month)
-      .fold(0.0, (sum, s) => sum + s.amount);
+  // 2. Récupération asynchrone des données
+  final sales = await ref.watch(salesProvider(filterForProviders).future);
+  final purchases = await ref.watch(purchasesProvider(filterForProviders).future);
+  final expenses = await ref.watch(expensesProvider(filterForProviders).future);
 
-  final currentMonthPurchases = purchases
-      .where((p) => p.purchaseDate.year == currentMonth.year && p.purchaseDate.month == currentMonth.month)
-      .fold(0.0, (sum, p) => sum + p.amount);
+  // Bornes temporelles pour le calcul local
+  final currentStart = DateTime(selectedMonth.year, selectedMonth.month, 1);
+  final prevStart = DateTime(selectedMonth.year, selectedMonth.month - 1, 1);
+  final nextMonthStart = DateTime(selectedMonth.year, selectedMonth.month + 1, 1);
 
-  final prevMonthSales = sales
-      .where((s) => s.saleDate.year == prevMonth.year && s.saleDate.month == prevMonth.month)
-      .fold(0.0, (sum, s) => sum + s.amount);
-
-  final prevMonthPurchases = purchases
-      .where((p) => p.purchaseDate.year == prevMonth.year && p.purchaseDate.month == prevMonth.month)
-      .fold(0.0, (sum, p) => sum + p.amount);
+  // Helper interne pour calculer le total sur une plage précise
+  double sumRange(List<dynamic> items, DateTime start, DateTime end, DateTime? Function(dynamic) getDate) {
+    return items.where((item) {
+      final d = getDate(item);
+      if (d == null) return false;
+      return d.isAfter(start.subtract(const Duration(seconds: 1))) && d.isBefore(end);
+    }).fold(0.0, (sum, item) => sum + (item.amount ?? 0.0));
+  }
 
   return MonthStats(
-    sales: currentMonthSales,
-    purchases: currentMonthPurchases,
-    margin: currentMonthSales - currentMonthPurchases,
-    prevMonthSales: prevMonthSales,
-    prevMonthPurchases: prevMonthPurchases,
-    prevMonthMargin: prevMonthSales - prevMonthPurchases,
+    sales: sumRange(sales, currentStart, nextMonthStart, (i) => i.saleDate),
+    purchases: sumRange(purchases, currentStart, nextMonthStart, (i) => i.purchaseDate),
+    expenses: sumRange(expenses, currentStart, nextMonthStart, (i) => i.date ?? i.expensesDate),
+    
+    prevMonthSales: sumRange(sales, prevStart, currentStart, (i) => i.saleDate),
+    prevMonthPurchases: sumRange(purchases, prevStart, currentStart, (i) => i.purchaseDate),
+    prevMonthExpenses: sumRange(expenses, prevStart, currentStart, (i) => i.date ?? i.expensesDate),
+    
     selectedMonth: selectedMonth,
   );
 });
 
-class MonthStats {
-  final double sales;
-  final double purchases;
-  final double margin;
-  final double prevMonthSales;
-  final double prevMonthPurchases;
-  final double prevMonthMargin;
-  final DateTime selectedMonth;
-
-  MonthStats({
-    required this.sales,
-    required this.purchases,
-    required this.margin,
-    required this.prevMonthSales,
-    required this.prevMonthPurchases,
-    required this.prevMonthMargin,
-    required this.selectedMonth,
-  });
-
-  double get salesEvolution => _calculateEvolution(prevMonthSales, sales);
-  double get purchasesEvolution => _calculateEvolution(prevMonthPurchases, purchases);
-  double get marginEvolution => _calculateEvolution(prevMonthMargin, margin);
-
-  double _calculateEvolution(double previous, double current) {
-    if (previous == 0) return current > 0 ? 100 : 0;
-    return ((current - previous) / previous) * 100;
-  }
-
-  bool get isSalesPositive => salesEvolution >= 0;
-  bool get isPurchasesPositive => purchasesEvolution <= 0;
-  bool get isMarginPositive => marginEvolution >= 0;
-  
-  bool get isCurrentMonth {
-    final now = DateTime.now();
-    return selectedMonth.year == now.year && selectedMonth.month == now.month;
-  }
-}
+// --- WIDGET PRINCIPAL ---
 
 class DashboardCard extends ConsumerWidget {
   const DashboardCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(selectedMonthStatsProvider);
+    final statsAsync = ref.watch(selectedMonthStatsProvider);
     final selectedMonth = ref.watch(selectedMonthProvider);
 
+    return statsAsync.when(
+      loading: () => _buildBaseContainer(
+        child: const SizedBox(height: 150, child: Center(child: CircularProgressIndicator(color: Colors.white))),
+      ),
+      error: (err, stack) => _buildBaseContainer(
+        child: const SizedBox(height: 150, child: Center(child: Text("Erreur de données", style: TextStyle(color: Colors.white)))),
+      ),
+      data: (stats) => _buildBaseContainer(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context, ref, selectedMonth, stats.isCurrentMonth),
+            const SizedBox(height: 16),
+            _buildStatsGrid(stats),
+            const SizedBox(height: 16),
+            _buildFooter(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBaseContainer({required Widget child}) {
     return Card(
       elevation: 8,
-      shadowColor: Colors.blue.withOpacity(0.3),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           gradient: LinearGradient(
-            colors: [Colors.blue.shade700, Colors.blue.shade500],
+            colors: [Colors.blue.shade800, Colors.blue.shade500],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16), // Réduit de 20 à 16
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // En-tête compact
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (!stats.isCurrentMonth)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 2),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'ARCHIVE',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        InkWell(
-                          onTap: () => _showMonthPicker(context, ref, selectedMonth),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _getMonthYearName(selectedMonth),
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(width: 2),
-                              Icon(
-                                Icons.keyboard_arrow_down,
-                                color: Colors.white.withOpacity(0.9),
-                                size: 18,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Text(
-                          'Tableau de bord',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: _getGlobalTrendColor(stats).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      _getGlobalTrendIcon(stats),
-                      color: _getGlobalTrendColor(stats),
-                      size: 24,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              
-              // ✅ CARDS PLUS HAUTES (140px au lieu de 120px)
-              SizedBox(
-                height: 140,
-                child: PageView(
-                  controller: PageController(viewportFraction: 0.88), // Légèrement plus large
-                  padEnds: false,
-                  children: [
-                    _buildStatCard(
-                      label: 'Ventes',
-                      value: stats.sales,
-                      evolution: stats.salesEvolution,
-                      icon: Icons.arrow_upward,
-                      color: Colors.green.shade300,
-                      isPositive: stats.isSalesPositive,
-                    ),
-                    _buildStatCard(
-                      label: 'Achats',
-                      value: stats.purchases,
-                      evolution: stats.purchasesEvolution,
-                      icon: Icons.arrow_downward,
-                      color: Colors.orange.shade300,
-                      isPositive: stats.isPurchasesPositive,
-                      isInverse: true,
-                    ),
-                    _buildStatCard(
-                      label: 'Marge',
-                      value: stats.margin,
-                      evolution: stats.marginEvolution,
-                      icon: Icons.show_chart,
-                      color: Colors.white,
-                      isPositive: stats.isMarginPositive,
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Indicateur de page
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildDotIndicator(Colors.white.withOpacity(0.8)),
-                  const SizedBox(width: 6),
-                  _buildDotIndicator(Colors.white.withOpacity(0.4)),
-                  const SizedBox(width: 6),
-                  _buildDotIndicator(Colors.white.withOpacity(0.4)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              
-              // Bouton détail compact
-              InkWell(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const DashboardScreen()),
-                ),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Voir le détail',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.arrow_forward,
-                        color: Colors.white.withOpacity(0.9),
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: child,
       ),
     );
   }
 
-  Future<void> _showMonthPicker(BuildContext context, WidgetRef ref, DateTime current) async {
-    final selected = await showDialog<DateTime>(
-      context: context,
-      builder: (context) => _MonthYearPickerDialog(initialDate: current),
-    );
-    
-    if (selected != null) {
-      ref.read(selectedMonthProvider.notifier).state = selected;
-    }
-  }
-
-  String _getMonthYearName(DateTime date) {
-    final months = [
-      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-    ];
-    return '${months[date.month - 1]} ${date.year}';
-  }
-
-  // ✅ CARD PLUS HAUTE AVEC VARIATION EN BLANC
-  Widget _buildStatCard({
-    required String label,
-    required double value,
-    required double evolution,
-    required IconData icon,
-    required Color color,
-    required bool isPositive,
-    bool isInverse = false,
-  }) {
-    final Color evolutionColor = isPositive ? Colors.green.shade600 : Colors.red.shade600;
-    final IconData evolutionIcon = isPositive ? Icons.trending_up : Icons.trending_down;
-
-    return Container(
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 1,
+  Widget _buildHeader(BuildContext context, WidgetRef ref, DateTime date, bool isCurrent) {
+    final months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: () => _selectMonth(context, ref, date),
+              child: Row(
+                children: [
+                  Text("${months[date.month-1]} ${date.year}", 
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14)),
+                  const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 18),
+                ],
+              ),
+            ),
+            Text(isCurrent ? "Performance Actuelle" : "Archive Mensuelle", 
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          ],
         ),
+        if (!isCurrent)
+          const Icon(Icons.history, color: Colors.white30, size: 28),
+      ],
+    );
+  }
+
+  Widget _buildStatsGrid(MonthStats stats) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildStatBox("VENTES", stats.sales, stats.salesEvolution, Colors.greenAccent),
+          _buildStatBox("ACHATS", stats.purchases, stats.purchasesEvolution, Colors.orangeAccent),
+          _buildStatBox("DÉPENSES", stats.expenses, stats.expensesEvolution, Colors.white),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatBox(String label, double val, double evolution, Color color) {
+    return Container(
+      width: 145,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(Formatters.formatCurrency(val), 
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
           Row(
             children: [
-              Icon(icon, color: color, size: 22),
-              const Spacer(),
-              // ✅ FOND BLANC POUR LA VARIATION
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white, // FOND BLANC
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(evolutionIcon, color: evolutionColor, size: 14),
-                    const SizedBox(width: 3),
-                    Text(
-                      '${evolution.abs().toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        color: evolutionColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                Formatters.formatCurrency(value),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22, // Légèrement réduit pour éviter débordement
-                  fontWeight: FontWeight.bold,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.85),
-                  fontSize: 13,
-                ),
-              ),
+              Icon(evolution >= 0 ? Icons.trending_up : Icons.trending_down, size: 14, color: color),
+              Text(" ${evolution.abs().toStringAsFixed(1)}%", 
+                style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
             ],
           ),
         ],
@@ -386,34 +179,68 @@ class DashboardCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildDotIndicator(Color color) {
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
+  Widget _buildFooter(BuildContext context) {
+    return Center(
+      child: TextButton(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardScreen())),
+        child: const Text("VOIR ANALYSES DÉTAILLÉES", 
+          style: TextStyle(color: Colors.white, fontSize: 12, letterSpacing: 1.1, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  IconData _getGlobalTrendIcon(MonthStats stats) {
-    if (stats.isMarginPositive && stats.isSalesPositive) return Icons.trending_up;
-    if (!stats.isMarginPositive && !stats.isSalesPositive) return Icons.trending_down;
-    return Icons.trending_flat;
-  }
-
-  Color _getGlobalTrendColor(MonthStats stats) {
-    if (stats.isMarginPositive && stats.isSalesPositive) return Colors.green.shade300;
-    if (!stats.isMarginPositive && !stats.isSalesPositive) return Colors.red.shade300;
-    return Colors.orange.shade300;
+  // Renommé de _selectDate à _selectMonth pour correspondre à l'appel dans le Header
+  void _selectMonth(BuildContext context, WidgetRef ref, DateTime current) async {
+    final DateTime? picked = await showDialog<DateTime>(
+      context: context,
+      builder: (context) => _MonthYearPickerDialog(initialDate: current),
+    );
+    if (picked != null) {
+      ref.read(selectedMonthProvider.notifier).state = picked;
+    }
   }
 }
 
-// Dialog de sélection mois/année (compact)
+// --- MODÈLE DE DONNÉES ---
+
+class MonthStats {
+  final double sales;
+  final double purchases;
+  final double expenses;
+  final double prevMonthSales;
+  final double prevMonthPurchases;
+  final double prevMonthExpenses;
+  final DateTime selectedMonth;
+
+  MonthStats({
+    required this.sales,
+    required this.purchases,
+    required this.expenses,
+    required this.prevMonthSales,
+    required this.prevMonthPurchases,
+    required this.prevMonthExpenses,
+    required this.selectedMonth,
+  });
+
+  double get salesEvolution => _calculate(prevMonthSales, sales);
+  double get purchasesEvolution => _calculate(prevMonthPurchases, purchases);
+  double get expensesEvolution => _calculate(prevMonthExpenses, expenses);
+
+  double _calculate(double prev, double curr) {
+    if (prev == 0) return curr > 0 ? 100 : 0;
+    return ((curr - prev) / prev) * 100;
+  }
+
+  bool get isCurrentMonth {
+    final now = DateTime.now();
+    return selectedMonth.year == now.year && selectedMonth.month == now.month;
+  }
+}
+
+// --- DIALOGUE DE SÉLECTION (À l'extérieur de la classe DashboardCard) ---
+
 class _MonthYearPickerDialog extends StatefulWidget {
   final DateTime initialDate;
-
   const _MonthYearPickerDialog({required this.initialDate});
 
   @override
@@ -421,160 +248,59 @@ class _MonthYearPickerDialog extends StatefulWidget {
 }
 
 class _MonthYearPickerDialogState extends State<_MonthYearPickerDialog> {
-  late int selectedYear;
-  late int selectedMonth;
-
-  final months = [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-  ];
+  late int year;
+  late int month;
+  final List<String> months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 
   @override
   void initState() {
     super.initState();
-    selectedYear = widget.initialDate.year;
-    selectedMonth = widget.initialDate.month;
+    year = widget.initialDate.year;
+    month = widget.initialDate.month;
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentYear = DateTime.now().year;
-    final years = List.generate(5, (i) => currentYear - i);
-
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        constraints: const BoxConstraints(maxWidth: 300),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Sélectionner une période',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Sélection Année compacte
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  iconSize: 20,
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () {
-                    if (selectedYear > years.last) {
-                      setState(() => selectedYear--);
-                    }
+    return AlertDialog(
+      title: const Text("Choisir le mois"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(onPressed: () => setState(() => year--), icon: const Icon(Icons.arrow_back_ios, size: 16)),
+              Text("$year", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              IconButton(onPressed: () => setState(() => year++), icon: const Icon(Icons.arrow_forward_ios, size: 16)),
+            ],
+          ),
+          const Divider(),
+          SizedBox(
+            width: double.maxFinite,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 0,
+              alignment: WrapAlignment.center,
+              children: List.generate(12, (i) {
+                return ChoiceChip(
+                  label: Text(months[i]),
+                  selected: month == i + 1,
+                  onSelected: (selected) {
+                    if (selected) setState(() => month = i + 1);
                   },
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '$selectedYear',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  iconSize: 20,
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () {
-                    if (selectedYear < years.first) {
-                      setState(() => selectedYear++);
-                    }
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            
-            // Grille des mois compacte
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: months.asMap().entries.map((entry) {
-                final index = entry.key + 1;
-                final month = entry.value;
-                final isSelected = index == selectedMonth;
-                final isCurrent = index == DateTime.now().month && 
-                                  selectedYear == DateTime.now().year;
-                
-                return InkWell(
-                  onTap: () => setState(() => selectedMonth = index),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    width: 65,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isSelected 
-                          ? Colors.blue 
-                          : isCurrent 
-                              ? Colors.blue.withOpacity(0.1)
-                              : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(10),
-                      border: isCurrent && !isSelected
-                          ? Border.all(color: Colors.blue, width: 1)
-                          : null,
-                    ),
-                    child: Text(
-                      month.substring(0, 3),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black87,
-                        fontWeight: isSelected || isCurrent 
-                            ? FontWeight.bold 
-                            : FontWeight.normal,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
                 );
-              }).toList(),
+              }),
             ),
-            const SizedBox(height: 16),
-            
-            // Boutons compacts
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  child: const Text('Annuler', style: TextStyle(fontSize: 13)),
-                ),
-                const SizedBox(width: 4),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(
-                      context, 
-                      DateTime(selectedYear, selectedMonth),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
-                  child: const Text('Valider', style: TextStyle(fontSize: 13)),
-                ),
-              ],
-            ),
-          ],
-        ),
+          )
+        ],
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Annuler")),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, DateTime(year, month)), 
+          child: const Text("Valider")
+        ),
+      ],
     );
   }
 }

@@ -35,12 +35,18 @@ class _FilterDialogContentState extends ConsumerState<_FilterDialogContent> {
 
   @override
   Widget build(BuildContext context) {
-    // 🔥 MARGE EN BAS avec MediaQuery
+    // 🟢 Récupération des suggestions pour l'autocomplétion
+    final suggestions = ref.watch(expenseSuggestionsProvider).maybeWhen(
+          data: (list) => list,
+          orElse: () => <String>[],
+        );
+
+    // 🔥 MARGE EN BAS pour éviter que le clavier ne cache le contenu
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom + 25;
 
     return Padding(
       padding: EdgeInsets.only(
-        bottom: bottomPadding, // 🔥 Marge du bas
+        bottom: bottomPadding,
         left: 16,
         right: 16,
         top: 16,
@@ -55,19 +61,47 @@ class _FilterDialogContentState extends ConsumerState<_FilterDialogContent> {
           ),
           const SizedBox(height: 16),
 
-          // Recherche texte
-          TextField(
-            controller: _searchCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Rechercher (nom, bénéficiaire...)',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.search),
-            ),
+          // --- RECHERCHE TEXTE AVEC AUTOCOMPLÉTION ---
+          Autocomplete<String>(
+            optionsBuilder: (TextEditingValue textEditingValue) {
+              if (textEditingValue.text.isEmpty) {
+                return suggestions;
+              }
+              return suggestions.where((String option) {
+                return option.toLowerCase().contains(
+                      textEditingValue.text.toLowerCase(),
+                    );
+              });
+            },
+            onSelected: (String selection) {
+              setState(() {
+                _searchCtrl.text = selection;
+              });
+            },
+            fieldViewBuilder: (context, fieldTextController, focusNode, onFieldSubmitted) {
+              // Synchronisation initiale si _searchCtrl a déjà une valeur
+              if (fieldTextController.text.isEmpty && _searchCtrl.text.isNotEmpty) {
+                fieldTextController.text = _searchCtrl.text;
+              }
+
+              return TextField(
+                controller: fieldTextController,
+                focusNode: focusNode,
+                decoration: const InputDecoration(
+                  labelText: 'Rechercher (nom, bénéficiaire...)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) {
+                  _searchCtrl.text = value;
+                },
+              );
+            },
           ),
 
           const SizedBox(height: 16),
 
-          // Dates
+          // --- SÉLECTION DES DATES ---
           Row(
             children: [
               Expanded(
@@ -114,7 +148,7 @@ class _FilterDialogContentState extends ConsumerState<_FilterDialogContent> {
 
           const SizedBox(height: 24),
 
-          // Boutons
+          // --- BOUTONS D'ACTION ---
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -130,9 +164,7 @@ class _FilterDialogContentState extends ConsumerState<_FilterDialogContent> {
               ),
               ElevatedButton.icon(
                 onPressed: () {
-                  ref
-                      .read(expenseFiltersProvider.notifier)
-                      .state = ExpenseFilters(
+                  ref.read(expenseFiltersProvider.notifier).state = ExpenseFilters(
                     searchQuery: _searchCtrl.text.trim().isEmpty
                         ? null
                         : _searchCtrl.text.trim(),
@@ -146,7 +178,7 @@ class _FilterDialogContentState extends ConsumerState<_FilterDialogContent> {
               ),
             ],
           ),
-          const SizedBox(height: 20), // 🔥 MARGE SUPPLÉMENTAIRE
+          const SizedBox(height: 20),
         ],
       ),
     );

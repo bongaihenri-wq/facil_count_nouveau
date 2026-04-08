@@ -3,6 +3,7 @@ import '/../core/utils/date_filter_helper.dart';
 import '/presentation/providers/sale_provider.dart';
 import '/presentation/providers/purchase_provider.dart';
 import '/presentation/providers/expense_provider.dart';
+import '/data/models/expense_model.dart';
 
 final currentScreenProvider = StateProvider<String>((ref) => 'dashboard');
 
@@ -33,64 +34,71 @@ class DashboardGlobalData {
 /// 🧮 3. Le Provider dérivé qui calcule tout à la volée !
 final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((ref) {
   
-  // 1️⃣ On écoute la période sélectionnée spécifiquement pour le Dashboard 🟢
-  // Cet objet est STABLE, Riverpod ne bouclera plus dessus.
+  // 1️⃣ On écoute la période sélectionnée
   final dashboardPeriodRange = ref.watch(selectedDashboardPeriodProvider);
 
-  // 2️⃣ On écoute directement avec l'objet fourni ! 🟢
+  // 2️⃣ Récupération des données
   final salesAsync = ref.watch(salesProvider(dashboardPeriodRange));
   final purchasesAsync = ref.watch(purchasesProvider(dashboardPeriodRange));
-  final expensesAsync = ref.watch(filteredExpensesProvider(dashboardPeriodRange)); 
   
-  // ⏳ Gestion des états de chargement
-  if (salesAsync is AsyncLoading || purchasesAsync is AsyncLoading || expensesAsync is AsyncLoading) {
+  // 🟢 Correction : expenses est DIRECTEMENT une List<ExpenseModel>
+  // car filteredExpensesProvider est maintenant un Provider simple.
+ final List<ExpenseModel> expenses = ref.watch(filteredExpensesProvider);
+  
+  // ⏳ Gestion des états de chargement (uniquement pour Ventes et Achats)
+  if (salesAsync is AsyncLoading || purchasesAsync is AsyncLoading) {
     return const AsyncLoading<DashboardGlobalData>();
   }
   
-  // ❌ Gestion des états d'erreur si un appel Supabase échoue
+  // ❌ Gestion des états d'erreur (uniquement pour Ventes et Achats)
   if (salesAsync is AsyncError) {
     return AsyncError<DashboardGlobalData>(salesAsync.error!, salesAsync.stackTrace!);
   }
   if (purchasesAsync is AsyncError) {
     return AsyncError<DashboardGlobalData>(purchasesAsync.error!, purchasesAsync.stackTrace!);
   }
-  if (expensesAsync is AsyncError) {
-    return AsyncError<DashboardGlobalData>(expensesAsync.error!, expensesAsync.stackTrace!);
-  }
 
-  // 📦 Si tout est bon, on extrait les listes (ou une liste vide par défaut)
+  // 📦 Extraction des listes pour Ventes et Achats
   final sales = salesAsync.value ?? [];
   final purchases = purchasesAsync.value ?? [];
-  final expenses = expensesAsync.value ?? []; 
+  // Note : 'expenses' est déjà extrait plus haut car c'est une liste directe.
 
   // ==========================================
-  // 📈 1️⃣ CALCUL DES TOTAUX (Pour les KPIs)
+  // 📈 1️⃣ CALCUL DES TOTAUX
   // ==========================================
   final totalVentes = sales.fold<double>(0, (sum, item) => sum + item.amount);
   final totalAchats = purchases.fold<double>(0, (sum, item) => sum + item.amount);
   final totalDepenses = expenses.fold<double>(0, (sum, item) => sum + item.amount); 
 
   // ==========================================
-  // 📊 2️⃣ ÉVOLUTION MENSUELLE (Pour le graphique)
+  // 📊 2️⃣ ÉVOLUTION MENSUELLE
   // ==========================================
   final List<String> months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
   final List<Map<String, dynamic>> monthlyEvolution = [];
 
   for (int i = 0; i < months.length; i++) {
-    final monthIndex = i + 1;
+    final int monthIndex = i + 1;
     
-    final salesInMonth = sales
-        .where((s) => s.saleDate.month == monthIndex)
-        .fold<double>(0, (sum, item) => sum + item.amount);
+    // --- VENTES ---
+    final salesInMonth = sales.where((s) {
+      // Sécurité renforcée : on vérifie que s et saleDate ne sont pas nuls
+      return s.saleDate.month == monthIndex;
+    }).fold<double>(0, (sum, item) => sum + (item.amount));
         
-    final purchasesInMonth = purchases
-        .where((p) => p.purchaseDate.month == monthIndex)
-        .fold<double>(0, (sum, item) => sum + item.amount);
+    // --- ACHATS ---
+    final purchasesInMonth = purchases.where((p) {
+      return p.purchaseDate.month == monthIndex;
+    }).fold<double>(0, (sum, item) => sum + (item.amount));
 
-    final expensesInMonth = expenses
-        .where((e) => e.expensesDate.month == monthIndex)
-        .fold<double>(0, (sum, item) => sum + item.amount); 
+    // --- DEPENSES ---
+    final expensesInMonth = expenses.where((e) {
+      // On teste les deux noms de champs possibles pour la date
+      final dateValue = e.date ?? e.expensesDate;
+      if (dateValue == null) return false;
+      return dateValue.month == monthIndex;
+    }).fold<double>(0, (sum, item) => sum + (item.amount)); 
 
+    // Ajout à la liste si un montant existe
     if (salesInMonth > 0 || purchasesInMonth > 0 || expensesInMonth > 0) {
       monthlyEvolution.add({
         'month': months[i],
@@ -102,7 +110,7 @@ final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((r
   }
 
   // ==========================================
-  // 🏆 3️⃣ TOP 5 DES PRODUITS (Pour le Ranking)
+  // 🏆 3️⃣ TOP 5 DES PRODUITS
   // ==========================================
   final Map<String, double> productSalesQuantities = {};
   
@@ -119,7 +127,7 @@ final dashboardGlobalDataProvider = Provider<AsyncValue<DashboardGlobalData>>((r
   final top5 = topProducts.take(5).toList();
 
   // ==========================================
-  // 🚀 4️⃣ RETOUR DES DONNÉES ENVELOPPÉES DANS ASYNCDATA
+  // 🚀 4️⃣ RETOUR DES DONNÉES
   // ==========================================
   return AsyncData(DashboardGlobalData(
     totalVentes: totalVentes,
