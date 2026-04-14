@@ -1,3 +1,5 @@
+import 'package:facil_count_nouveau/presentation/providers/auth_provider.dart';
+import 'package:facil_count_nouveau/presentation/widgets/subscription_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/date_filter_helper.dart';
@@ -21,6 +23,7 @@ class SaleScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
     final currentSalePeriod = ref.watch(selectedSalePeriodProvider);
     final salesAsync = ref.watch(salesProvider(currentSalePeriod));
     final filteredSales = ref.watch(filteredSalesProvider);
@@ -29,6 +32,9 @@ class SaleScreen extends ConsumerWidget {
     
     // 🛡️ On récupère la période actuelle
     final currentPeriod = ref.watch(selectedSalePeriodProvider);
+     
+    if (!auth.canAccessApp) 
+    return const SubscriptionOverlay();
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,

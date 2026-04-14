@@ -2,11 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/secure_storage_service.dart';
 import '../../data/models/user_model.dart';
+import '../../data/models/subscription_model.dart';
 
+/// --- PROVIDER GLOBAL ---
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier();
 });
 
+/// --- ÉTAT DE L'AUTHENTIFICATION ---
 class AuthState {
   final UserModel? currentUser;
   final bool isLoading;
@@ -30,43 +33,45 @@ class AuthState {
     );
   }
 
+  // Getters pour l'UI
   bool get isLoggedIn => currentUser != null;
   bool get isAdmin => currentUser?.isAdmin ?? false;
   String? get businessId => currentUser?.businessId;
+
+  // Logique d'accès Pro / Trial
+  bool get canAccessApp => currentUser?.canAccessProFeatures ?? false;
+  SubscriptionType get currentPlan => currentUser?.subscription?.type ?? SubscriptionType.trial;
 }
 
+/// --- NOTIFIER D'AUTHENTIFICATION ---
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService = AuthService();
 
   AuthNotifier() : super(AuthState());
 
+  /// 🟢 INITIALISATION
   Future<void> initialize() async {
     state = state.copyWith(isLoading: true);
-    
     try {
       final token = await SecureStorageService.getToken();
       if (token != null) {
         final user = await _authService.getCurrentUser();
         state = state.copyWith(currentUser: user, isLoading: false);
-        print('✅ Auth initialisé - user: ${user?.id}, businessId: ${user?.businessId}');
       } else {
         state = state.copyWith(isLoading: false);
-        print('🚫 Pas de token');
       }
     } catch (e) {
       await SecureStorageService.clearAll();
       state = state.copyWith(error: e.toString(), isLoading: false);
-      print('❌ Erreur init: $e');
     }
   }
 
+  /// 🟢 CONNEXION
   Future<bool> login(String phoneNumber, String password) async {
     state = state.copyWith(isLoading: true, error: null);
-    
     try {
       final user = await _authService.login(phoneNumber, password);
       state = state.copyWith(currentUser: user, isLoading: false);
-      print('✅ Login - user: ${user?.id}, businessId: ${user?.businessId}');
       return true;
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
@@ -74,6 +79,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// 🟢 INSCRIPTION (Création du compte Admin + Business)
   Future<bool> register({
     required String phoneNumber,
     required String password,
@@ -84,7 +90,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? email,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
-    
     try {
       final user = await _authService.registerUser(
         phoneNumber: phoneNumber,
@@ -104,42 +109,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> logout() async {
-    print('🧹 Déconnexion...');
-    await _authService.logout();
-    await SecureStorageService.clearAll();
-    state = AuthState();
-    print('✅ Déconnexion complète');
-  }
-
-  Future<bool> updateProfile(Map<String, dynamic> data) async {
-    if (state.currentUser == null) return false;
-    
-    state = state.copyWith(isLoading: true);
-    
-    try {
-      final updated = await _authService.updateUser(state.currentUser!.id, data);
-      state = state.copyWith(currentUser: updated, isLoading: false);
-      return true;
-    } catch (e) {
-      state = state.copyWith(error: e.toString(), isLoading: false);
-      return false;
-    }
-  }
-
-  Future<List<UserModel>> getBusinessUsers() async {
-    if (state.currentUser == null || !state.currentUser!.isAdmin) {
-      return [];
-    }
-
-    try {
-      return await _authService.getBusinessUsers(state.currentUser!.businessId!);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      return [];
-    }
-  }
-
+  /// 🟢 CRÉATION D'UTILISATEUR (Utilisé dans User Management)
+  /// Permet à l'Admin de créer des comptes pour ses employés
   Future<bool> createUser({
     required String phoneNumber,
     required String password,
@@ -159,7 +130,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _authService.createUser(
         phoneNumber: phoneNumber,
         password: password,
-        businessId: state.currentUser!.businessId!,
+        businessId: state.currentUser!.businessId,
         firstName: firstName,
         lastName: lastName,
         email: email,
@@ -173,11 +144,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> toggleUserStatus(String userId, bool isActive) async {
-    if (state.currentUser == null || !state.currentUser!.isAdmin) {
-      return false;
+  /// 🟢 GESTION DES UTILISATEURS EXISTANTS
+  Future<List<UserModel>> getBusinessUsers() async {
+    if (state.currentUser == null || !state.currentUser!.isAdmin) return [];
+    try {
+      return await _authService.getBusinessUsers(state.currentUser!.businessId);
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+      return [];
     }
+  }
 
+  Future<bool> toggleUserStatus(String userId, bool isActive) async {
+    if (state.currentUser == null || !state.currentUser!.isAdmin) return false;
     try {
       await _authService.toggleUserStatus(userId, isActive);
       return true;
@@ -187,13 +166,36 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  void clearError() {
-    state = state.copyWith(error: null);
+  /// 🟢 PROFIL & ABONNEMENT
+  Future<bool> updateProfile(Map<String, dynamic> data) async {
+    if (state.currentUser == null) return false;
+    state = state.copyWith(isLoading: true);
+    try {
+      final updated = await _authService.updateUser(state.currentUser!.id, data);
+      state = state.copyWith(currentUser: updated, isLoading: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: e.toString(), isLoading: false);
+      return false;
+    }
   }
 
-  // Méthode corrigée
-  Future<String?> getCurrentBusinessId() async {
-    final user = await _authService.getCurrentUser();
-    return user?.businessId;
+  Future<void> refreshSubscriptionStatus() async {
+    if (state.currentUser == null) return;
+    try {
+      final updatedUser = await _authService.getCurrentUser();
+      state = state.copyWith(currentUser: updatedUser);
+    } catch (e) {
+      print('❌ Erreur refresh sub: $e');
+    }
   }
+
+  /// 🟢 SORTIE
+  Future<void> logout() async {
+    await _authService.logout();
+    await SecureStorageService.clearAll();
+    state = AuthState();
+  }
+
+  void clearError() => state = state.copyWith(error: null);
 }

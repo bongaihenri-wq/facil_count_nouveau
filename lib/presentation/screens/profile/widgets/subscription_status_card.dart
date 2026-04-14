@@ -1,108 +1,109 @@
+import 'package:facil_count_nouveau/data/models/subscription_model.dart';
+import 'package:facil_count_nouveau/data/models/user_model.dart';
 import 'package:flutter/material.dart';
 import '/../../core/constants/app_colors.dart';
 
 class SubscriptionStatusCard extends StatelessWidget {
-  final DateTime createdAt;
-  final bool isPremium;
+  final UserModel user; // On passe le user complet pour plus de flexibilité
 
-  const SubscriptionStatusCard({
-    super.key, 
-    required this.createdAt, 
-    this.isPremium = false
-  });
+  const SubscriptionStatusCard({super.key, required this.user});
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final totalTrialDays = 30;
-    final elapsedDays = now.difference(createdAt).inDays;
-    final remainingDays = totalTrialDays - elapsedDays;
+    final sub = user.subscription;
     
-    // Calcul du pourcentage pour la barre de progression
-    double progress = (remainingDays / totalTrialDays).clamp(0.0, 1.0);
-    bool isExpired = remainingDays <= 0;
-    bool showWarning = elapsedDays >= 7; // On affiche après 1 semaine
+    // Cas 1 : L'utilisateur a un abonnement actif (Base, Elite, Premium)
+    if (sub != null && sub.isValid && !sub.isTrial) {
+      return _buildActiveSubCard(sub);
+    }
 
-    if (!showWarning && !isPremium) return const SizedBox.shrink();
+    // Cas 2 : L'utilisateur est en période d'essai (les 30 premiers jours)
+    return _buildTrialCard();
+  }
 
+  Widget _buildActiveSubCard(SubscriptionModel sub) {
     return Card(
       elevation: 0,
+      color: _getPlanColor(sub.type).withOpacity(0.05),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(color: _getPlanColor(sub.type).withOpacity(0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  "Statut du compte",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Icon(Icons.verified, color: _getPlanColor(sub.type)),
+                const SizedBox(width: 8),
+                Text(
+                  "PLAN ${sub.type.name.toUpperCase()}",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold, 
+                    color: _getPlanColor(sub.type)
+                  ),
                 ),
-                _buildStatusBadge(isPremium, isExpired),
+                const Spacer(),
+                Text("${sub.daysRemaining} jours restants"),
               ],
             ),
-            const SizedBox(height: 16),
-            if (!isPremium) ...[
-              Text(
-                isExpired 
-                  ? "Votre essai a expiré" 
-                  : "Il vous reste $remainingDays jours d'essai gratuit",
-                style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
-              ),
+            if (sub.isInGracePeriod) ...[
               const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 10,
-                  backgroundColor: Colors.grey.shade200,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    remainingDays < 5 ? Colors.red : AppColors.primary,
-                  ),
-                ),
-              ),
-              if (isExpired) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () { /* Future page de paiement */ },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text("Activer l'abonnement Pro"),
-                  ),
-                ),
-              ],
-            ] else 
-              const Text("✨ Vous profitez de l'accès illimité Pro"),
+              Text(sub.alertMessage, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ]
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusBadge(bool premium, bool expired) {
-    String label = premium ? "PRO" : (expired ? "EXPIRÉ" : "ESSAI");
-    Color color = premium ? Colors.amber : (expired ? Colors.red : Colors.blue);
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color),
+  Widget _buildTrialCard() {
+    final remaining = user.trialDaysRemaining;
+    final isExpired = user.isTrialExpired;
+
+    return Card(
+      // ... (Ta logique de barre de progression actuelle) ...
+      // Mais avec une option pour choisir les 3 paliers :
+      child: Column(
+        children: [
+           // ... (Entête de ta carte actuelle) ...
+           if (isExpired) 
+             _buildPlanSelector(), // 🟢 On propose les 3 choix directement
+        ],
       ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
-      ),
+    );
+  }
+
+  // Helper pour les couleurs de palier
+  Color _getPlanColor(SubscriptionType type) {
+    switch (type) {
+      case SubscriptionType.premium: return Colors.purple;
+      case SubscriptionType.elite: return Colors.amber.shade700;
+      case SubscriptionType.base: return AppColors.primary;
+      default: return Colors.blue;
+    }
+  }
+
+  Widget _buildPlanSelector() {
+    return Column(
+      children: [
+        const Text("Choisissez votre palier pour continuer :"),
+        const SizedBox(height: 12),
+        _planTile("Base", "1 000 CFA", Colors.blue),
+        _planTile("Elite", "2 500 CFA", Colors.amber),
+        _planTile("Premium", "5 000 CFA", Colors.purple),
+      ],
+    );
+  }
+
+  Widget _planTile(String name, String price, Color color) {
+    return ListTile(
+      dense: true,
+      leading: Icon(Icons.star, color: color),
+      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+      trailing: Text(price, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+      onTap: () { /* Action de paiement */ },
     );
   }
 }

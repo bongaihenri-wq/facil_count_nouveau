@@ -1,3 +1,5 @@
+import 'package:facil_count_nouveau/data/models/subscription_model.dart';
+
 class UserModel {
   final String id;
   final String phoneNumber;
@@ -10,10 +12,9 @@ class UserModel {
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final SubscriptionModel? subscription; // L'objet complet
 
-  // Constante pour la durée de l'essai
   static const int trialDurationDays = 30;
-  
 
   UserModel({
     required this.id,
@@ -27,7 +28,23 @@ class UserModel {
     required this.isActive,
     required this.createdAt,
     required this.updatedAt,
+    this.subscription,
   });
+
+  // --- LOGIQUE D'ACCÈS AMÉLIORÉE ---
+
+  // L'utilisateur a accès s'il a un abonnement valide OU s'il est encore en essai
+  bool get canAccessProFeatures {
+    if (subscription != null && subscription!.isValid) return true;
+    return !isTrialExpired;
+  }
+
+  // Identification précise du palier
+  bool get isBaseUser => subscription?.type == SubscriptionType.base;
+  bool get isEliteUser => subscription?.type == SubscriptionType.elite;
+  bool get isPremiumUser => subscription?.type == SubscriptionType.premium;
+
+  // --- FACTORY CORRIGÉ ---
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
@@ -42,10 +59,14 @@ class UserModel {
       isActive: json['is_active'] ?? true,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
+      // 🟢 CORRECTION : Il faut transformer le JSON de l'abonnement s'il existe
+      subscription: json['subscription'] != null 
+          ? SubscriptionModel.fromJson(json['subscription']) 
+          : null,
     );
   }
 
-  // --- GETTERS DE PROFIL ---
+  // --- GETTERS ---
 
   String get fullName {
     final trimmedFirst = firstName.trim();
@@ -57,37 +78,19 @@ class UserModel {
   String get initial {
     if (firstName.trim().isNotEmpty) {
       return firstName.trim().substring(0, 1).toUpperCase();
-    } else if (lastName.trim().isNotEmpty) {
-      return lastName.trim().substring(0, 1).toUpperCase();
     }
-    return 'U';
+    return lastName.trim().isNotEmpty ? lastName.substring(0, 1).toUpperCase() : 'U';
   }
 
   bool get isAdmin => role == 'admin';
 
-  // --- LOGIQUE D'ABONNEMENT (Trial & Sub) ---
-
-  int get daysSinceCreation {
-    return DateTime.now().difference(createdAt).inDays;
-   
-  }
-
-  int get trialDaysRemaining {
-    final remaining = trialDurationDays - daysSinceCreation;
-    return remaining > 0 ? remaining : 0;
-  }
-
+  int get daysSinceCreation => DateTime.now().difference(createdAt).inDays;
+  int get trialDaysRemaining => (trialDurationDays - daysSinceCreation).clamp(0, trialDurationDays);
   bool get isTrialExpired => daysSinceCreation >= trialDurationDays;
+  double get trialProgress => (trialDaysRemaining / trialDurationDays).clamp(0.0, 1.0);
+  bool get hasSubscriptionAlert => !canAccessProFeatures || trialDaysRemaining <= 5;
 
-  double get trialProgress {
-    final progress = trialDaysRemaining / trialDurationDays;
-    return progress.clamp(0.0, 1.0);
-  }
-
-  // Alerte critique si moins de 5 jours restants
-  bool get hasSubscriptionAlert => trialDaysRemaining <= 5;
-
-  // --- COPY WITH ---
+  // --- COPY WITH (Mise à jour pour inclure subscription) ---
 
   UserModel copyWith({
     String? id,
@@ -101,6 +104,7 @@ class UserModel {
     bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
+    SubscriptionModel? subscription,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -114,6 +118,7 @@ class UserModel {
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      subscription: subscription ?? this.subscription,
     );
   }
 }

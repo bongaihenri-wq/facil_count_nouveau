@@ -1,3 +1,5 @@
+import 'package:facil_count_nouveau/presentation/providers/auth_provider.dart';
+import 'package:facil_count_nouveau/presentation/widgets/subscription_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/date_filter_helper.dart';
@@ -20,6 +22,11 @@ class ExpenseScreen extends ConsumerWidget {
 
  @override
 Widget build(BuildContext context, WidgetRef ref) {
+  final auth = ref.watch(authProvider);
+  if (!auth.canAccessApp) {
+    return const SubscriptionOverlay();
+  }
+
   // 🟢 Lecture des états
   final tabIndex = ref.watch(expenseTabProvider);
   final currentPeriod = ref.watch(selectedPeriodProvider);
