@@ -11,6 +11,10 @@ class UserModel {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  // Constante pour la durée de l'essai
+  static const int trialDurationDays = 30;
+  
+
   UserModel({
     required this.id,
     required this.phoneNumber,
@@ -41,7 +45,8 @@ class UserModel {
     );
   }
 
-  // 🟢 Concaténation propre du nom complet
+  // --- GETTERS DE PROFIL ---
+
   String get fullName {
     final trimmedFirst = firstName.trim();
     final trimmedLast = lastName.trim();
@@ -49,19 +54,41 @@ class UserModel {
     return '$trimmedFirst $trimmedLast'.trim();
   }
 
-  // 🟢 Retourne la première lettre sécurisée (évite les crashs si le nom est vide)
   String get initial {
     if (firstName.trim().isNotEmpty) {
       return firstName.trim().substring(0, 1).toUpperCase();
     } else if (lastName.trim().isNotEmpty) {
       return lastName.trim().substring(0, 1).toUpperCase();
     }
-    return 'U'; // Par défaut
+    return 'U';
   }
 
   bool get isAdmin => role == 'admin';
 
-  // 🟢 Très utile pour mettre à jour un utilisateur dans Riverpod
+  // --- LOGIQUE D'ABONNEMENT (Trial & Sub) ---
+
+  int get daysSinceCreation {
+    return DateTime.now().difference(createdAt).inDays;
+   
+  }
+
+  int get trialDaysRemaining {
+    final remaining = trialDurationDays - daysSinceCreation;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  bool get isTrialExpired => daysSinceCreation >= trialDurationDays;
+
+  double get trialProgress {
+    final progress = trialDaysRemaining / trialDurationDays;
+    return progress.clamp(0.0, 1.0);
+  }
+
+  // Alerte critique si moins de 5 jours restants
+  bool get hasSubscriptionAlert => trialDaysRemaining <= 5;
+
+  // --- COPY WITH ---
+
   UserModel copyWith({
     String? id,
     String? phoneNumber,
