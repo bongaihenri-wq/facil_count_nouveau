@@ -141,9 +141,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     radius: 50,
                     backgroundColor: AppColors.primary,
                     child: Text(
-                      user.fullName.isNotEmpty 
-                        ? user.fullName.substring(0, 1).toUpperCase()
-                        : '?',
+                      user.initial,
                       style: const TextStyle(
                         fontSize: 32,
                         color: Colors.white,
@@ -168,7 +166,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            
+            const SizedBox(height: 24),
+            
+            // --- NOUVEAU : CARTE DE STATUT D'ABONNEMENT ---
+            _buildSubscriptionCard(user),
+            
+            const SizedBox(height: 16),
             
             // Info Cards
             _buildInfoCard(
@@ -210,19 +214,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 const SizedBox(height: 16),
                 ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.business, color: AppColors.primary),
-                  title: const Text('Commerce'),
-                  subtitle: FutureBuilder<String?>(
-                    future: AuthService().getCurrentBusinessId(),
-                    builder: (context, snapshot) {
-                      return Text(
-                        snapshot.data ?? 'Chargement...',
-                        style: const TextStyle(fontSize: 12),
-                      );
-                    },
+                  title: const Text('ID Commerce'),
+                  subtitle: Text(
+                    user.businessId,
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ),
                 ListTile(
+                  contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.calendar_today, color: AppColors.primary),
                   title: const Text('Membre depuis'),
                   subtitle: Text(
@@ -244,13 +245,105 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   backgroundColor: Colors.red.shade50,
                   foregroundColor: Colors.red,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.red.shade100),
                   ),
                 ),
               ),
             ),
+            const SizedBox(height: 20),
           ],
+        ),
+      ),
+    );
+  }
+
+  // Widget interne pour la gestion de l'abonnement
+  Widget _buildSubscriptionCard(user) {
+    // Utilisation des getters du modèle pour éviter les erreurs de calcul
+    final remainingDays = user.trialDaysRemaining;
+    final progress = user.trialProgress;
+    final isExpired = user.isTrialExpired;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Statut de l'abonnement",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                _buildStatusBadge(isExpired),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isExpired 
+                ? "Votre période d'essai est terminée" 
+                : "Il vous reste $remainingDays jours d'essai gratuit",
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  isExpired ? Colors.red : (remainingDays < 7 ? Colors.orange : AppColors.primary),
+                ),
+              ),
+            ),
+            if (isExpired) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    // Logique de paiement future
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text("Passer à la version Pro"),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(bool isExpired) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isExpired ? Colors.red.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isExpired ? Colors.red : Colors.blue),
+      ),
+      child: Text(
+        isExpired ? "EXPIRÉ" : "ESSAI",
+        style: TextStyle(
+          color: isExpired ? Colors.red : Colors.blue,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
         ),
       ),
     );
@@ -258,8 +351,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _buildInfoCard({required String title, required List<Widget> children}) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -292,12 +388,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       controller: controller,
       enabled: enabled,
       keyboardType: keyboardType,
+      style: TextStyle(color: enabled ? Colors.black87 : Colors.grey.shade600),
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: enabled ? AppColors.primary : Colors.grey),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         filled: !enabled,
-        fillColor: enabled ? null : Colors.grey.shade100,
+        fillColor: enabled ? null : Colors.grey.shade50,
       ),
     );
   }

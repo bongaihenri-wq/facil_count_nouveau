@@ -30,7 +30,7 @@ class ChartSection extends StatelessWidget {
             )
           else
             SizedBox(
-              height: 150,
+              height: 170,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 crossAxisAlignment: CrossAxisAlignment.end,
