@@ -1,3 +1,4 @@
+import 'package:facil_count_nouveau/presentation/screens/subscription_plans_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
@@ -313,7 +314,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // Logique de paiement future
+                  Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SubscriptionPlansScreen(),
+      ),
+    );  // Logique de paiement future
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,

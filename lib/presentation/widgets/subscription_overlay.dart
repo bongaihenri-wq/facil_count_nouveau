@@ -1,18 +1,21 @@
+import 'package:facil_count_nouveau/presentation/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
-import '../screens/subscription_plans_screen.dart'; // Import de ta page de tarifs
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // Nécessaire pour ConsumerWidget
+import '../screens/subscription_plans_screen.dart';
 
-class SubscriptionOverlay extends StatelessWidget {
+// On change StatelessWidget en ConsumerWidget pour accéder à "ref"
+class SubscriptionOverlay extends ConsumerWidget {
   final String? message;
 
   const SubscriptionOverlay({
-    super.key, 
+    super.key,
     this.message,
   });
 
   @override
-  Widget build(BuildContext context) {
+  // On ajoute WidgetRef ref ici
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      // On utilise un Container avec un léger dégradé pour un look pro
       body: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(30.0),
@@ -43,7 +46,7 @@ class SubscriptionOverlay extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 40),
-            
+
             // Titre principal
             const Text(
               "Accès Limité",
@@ -55,10 +58,11 @@ class SubscriptionOverlay extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
-            
+
             // Message explicatif
             Text(
-              message ?? "Votre période d'essai est arrivée à son terme ou votre abonnement a expiré. Pour continuer à gérer vos ventes et vos stocks, merci de choisir un forfait.",
+              message ??
+                  "Votre période d'essai est arrivée à son terme ou votre abonnement a expiré. Pour continuer à gérer vos ventes et vos stocks, merci de choisir un forfait.",
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey.shade700,
@@ -67,7 +71,7 @@ class SubscriptionOverlay extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 50),
-            
+
             // Bouton d'action principal
             SArea(
               width: double.infinity,
@@ -82,7 +86,6 @@ class SubscriptionOverlay extends StatelessWidget {
                   ),
                 ),
                 onPressed: () {
-                  // Navigation vers la page des 3 plans (Base, Elite, Premium)
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -96,14 +99,34 @@ class SubscriptionOverlay extends StatelessWidget {
                 ),
               ),
             ),
-            
+
+            const SizedBox(height: 15),
+
+            // Bouton de rafraîchissement (Maintenant fonctionnel avec ref)
+            OutlinedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text("Vérifier mon paiement"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.orange,
+                side: const BorderSide(color: Colors.orange),
+              ),
+              onPressed: () async {
+                // Affiche un petit indicateur visuel
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Vérification en cours...")),
+                );
+                
+                // Appelle la fonction de rafraîchissement
+                await ref.read(authProvider.notifier).refreshSubscriptionStatus();
+              },
+            ),
+
             const SizedBox(height: 20),
-            
-            // Petit bouton discret pour se déconnecter au cas où
+
+            // Bouton de déconnexion (Activé lui aussi)
             TextButton(
-              onPressed: () {
-                // Ici tu peux appeler ton authProvider pour déconnecter
-                // ref.read(authProvider.notifier).logout();
+              onPressed: () async {
+                await ref.read(authProvider.notifier).logout();
               },
               child: Text(
                 "Se déconnecter",
@@ -117,12 +140,16 @@ class SubscriptionOverlay extends StatelessWidget {
   }
 }
 
-// Widget utilitaire pour limiter la largeur sur tablette/web
+// Widget utilitaire inchangé
 class SArea extends StatelessWidget {
   final Widget child;
   final double width;
   final double height;
-  const SArea({super.key, required this.child, required this.width, required this.height});
+  const SArea(
+      {super.key,
+      required this.child,
+      required this.width,
+      required this.height});
 
   @override
   Widget build(BuildContext context) {

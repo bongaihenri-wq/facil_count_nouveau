@@ -4,12 +4,8 @@ import '../../core/services/secure_storage_service.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/subscription_model.dart';
 
-/// --- PROVIDER GLOBAL ---
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier();
-});
-
 /// --- ÉTAT DE L'AUTHENTIFICATION ---
+/// Gère l'utilisateur actuel, le chargement et les erreurs
 class AuthState {
   final UserModel? currentUser;
   final bool isLoading;
@@ -33,15 +29,20 @@ class AuthState {
     );
   }
 
-  // Getters pour l'UI
+  // Getters utiles pour l'UI
   bool get isLoggedIn => currentUser != null;
   bool get isAdmin => currentUser?.isAdmin ?? false;
   String? get businessId => currentUser?.businessId;
 
-  // Logique d'accès Pro / Trial
+  // Logique d'accès SaaS : l'utilisateur peut-il utiliser les fonctions Pro ?
   bool get canAccessApp => currentUser?.canAccessProFeatures ?? false;
   SubscriptionType get currentPlan => currentUser?.subscription?.type ?? SubscriptionType.trial;
 }
+
+/// --- PROVIDER GLOBAL ---
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+  return AuthNotifier();
+});
 
 /// --- NOTIFIER D'AUTHENTIFICATION ---
 class AuthNotifier extends StateNotifier<AuthState> {
@@ -50,6 +51,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier() : super(AuthState());
 
   /// 🟢 INITIALISATION
+  /// Vérifie si un token existe et récupère le profil utilisateur au démarrage
   Future<void> initialize() async {
     state = state.copyWith(isLoading: true);
     try {
@@ -79,7 +81,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// 🟢 INSCRIPTION (Création du compte Admin + Business)
+  /// 🟢 RAFRAÎCHISSEMENT DU STATUT (Indispensable pour débloquer l'accès)
+  Future<void> refreshSubscriptionStatus() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final user = await _authService.getCurrentUser(); 
+      state = state.copyWith(currentUser: user, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(error: e.toString(), isLoading: false);
+    }
+  }
+
+  /// 🟢 INSCRIPTION (Compte Administrateur + Entreprise)
   Future<bool> register({
     required String phoneNumber,
     required String password,
@@ -109,8 +122,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// 🟢 CRÉATION D'UTILISATEUR (Utilisé dans User Management)
-  /// Permet à l'Admin de créer des comptes pour ses employés
+  /// 🟢 CRÉATION D'EMPLOYÉ (Réservé à l'Admin)
   Future<bool> createUser({
     required String phoneNumber,
     required String password,
@@ -123,9 +135,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(error: 'Accès réservé aux administrateurs');
       return false;
     }
-
     state = state.copyWith(isLoading: true, error: null);
-
     try {
       await _authService.createUser(
         phoneNumber: phoneNumber,
@@ -144,7 +154,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// 🟢 GESTION DES UTILISATEURS EXISTANTS
+  /// 🟢 RÉCUPÉRATION DES UTILISATEURS DU BUSINESS
   Future<List<UserModel>> getBusinessUsers() async {
     if (state.currentUser == null || !state.currentUser!.isAdmin) return [];
     try {
@@ -155,18 +165,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// 🟢 ACTIVER / DÉSACTIVER UN UTILISATEUR
   Future<bool> toggleUserStatus(String userId, bool isActive) async {
     if (state.currentUser == null || !state.currentUser!.isAdmin) return false;
+    state = state.copyWith(isLoading: true, error: null);
     try {
       await _authService.toggleUserStatus(userId, isActive);
+      state = state.copyWith(isLoading: false);
       return true;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: e.toString(), isLoading: false);
       return false;
     }
   }
 
-  /// 🟢 PROFIL & ABONNEMENT
+  /// 🟢 MISE À JOUR DU PROFIL
   Future<bool> updateProfile(Map<String, dynamic> data) async {
     if (state.currentUser == null) return false;
     state = state.copyWith(isLoading: true);
@@ -180,22 +193,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> refreshSubscriptionStatus() async {
-    if (state.currentUser == null) return;
-    try {
-      final updatedUser = await _authService.getCurrentUser();
-      state = state.copyWith(currentUser: updatedUser);
-    } catch (e) {
-      print('❌ Erreur refresh sub: $e');
-    }
-  }
-
-  /// 🟢 SORTIE
+  /// 🟢 DÉCONNEXION
   Future<void> logout() async {
     await _authService.logout();
     await SecureStorageService.clearAll();
-    state = AuthState();
+    state = AuthState(); // Reset l'état de l'application
   }
 
+  /// 🟢 NETTOYAGE DES ERREURS
   void clearError() => state = state.copyWith(error: null);
 }
