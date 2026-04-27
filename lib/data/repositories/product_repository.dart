@@ -10,63 +10,35 @@ class ProductRepository {
   ProductRepository(this._client, this._businessHelper);
 
   Future<List<ProductModel>> getProducts() async {
+    final businessId = await _businessHelper.getBusinessId();
 
-   final businessId = await _businessHelper.getBusinessId();
-  
-  // ⬇️ LOGS CRUCIAUX
-  print('🔍🔍🔍 User ID: ${_client.auth.currentUser?.id}');
-  print('🔍🔍🔍 Business ID from helper: $businessId'); 
-
+    // 1. On récupère les produits ET le stock calculé par SQL (via la jointure)
     final productsData = await _client
         .from('products')
-        .select('id, name, category, supplier, initial_stock, low_stock_threshold, created_at, business_id')
+        .select('''
+          *,
+          product_current_stock(current_stock)
+        ''')
         .eq('business_id', businessId)
         .order('name');
-      // ⬇️ LOG DES RÉSULTATS
-  for (var p in productsData) {
-    print('🔍 Produit: ${p['name']}, business_id: ${p['business_id']}');
-  }
-  print('🔍 Total produits: ${productsData.length}');
-
 
     if (productsData.isEmpty) return [];
 
-    final productIds = productsData.map((p) => p['id'] as String).toList();
-
-    final allPurchases = await _client
-        .from('purchases')
-        .select('product_id, quantity')
-        .inFilter('product_id', productIds);
-
-    final allSales = await _client
-        .from('sales')
-        .select('product_id, quantity')
-        .inFilter('product_id', productIds);
-
     return productsData.map((productJson) {
-      final productId = productJson['id'] as String;
-      final initialStock = (productJson['initial_stock'] as num?)?.toInt() ?? 0;
-
-      final productPurchases = allPurchases.where((p) => p['product_id'] == productId);
-      final totalPurchases = productPurchases.fold<int>(
-        0, (sum, p) => sum + ((p['quantity'] as num?)?.toInt() ?? 0),
-      );
-
-      final productSales = allSales.where((s) => s['product_id'] == productId);
-      final totalSales = productSales.fold<int>(
-        0, (sum, s) => sum + ((s['quantity'] as num?)?.toInt() ?? 0),
-      );
-
-      final realStock = initialStock + totalPurchases - totalSales;
+      // 2. On récupère la valeur calculée par le Trigger SQL
+      final stockRelation = productJson['product_current_stock'] as List?;
+      final sqlCalculatedStock = (stockRelation != null && stockRelation.isNotEmpty)
+          ? (stockRelation[0]['current_stock'] as num?)?.toInt() ?? 0
+          : (productJson['initial_stock'] as num?)?.toInt() ?? 0;
 
       return ProductModel.fromJson({
         'id': productJson['id'],
         'name': productJson['name'],
         'category': productJson['category'],
         'supplier': productJson['supplier'],
-        'initial_stock': initialStock,
+        'initial_stock': (productJson['initial_stock'] as num?)?.toInt() ?? 0,
         'low_stock_threshold': (productJson['low_stock_threshold'] as num?)?.toInt() ?? 10,
-        'current_stock': realStock,
+        'current_stock': sqlCalculatedStock, // Utilise la valeur SQL
         'created_at': productJson['created_at'],
       });
     }).toList();
@@ -94,32 +66,32 @@ class ProductRepository {
       .from('products')
       .select('id')
       .eq('business_id', businessId)
-      .ilike('name', name) // ilike est insensible à la casse (Malta == malta)
+      .ilike('name', name)
       .maybeSingle();
 
-  if (existing != null) {
-    throw Exception('Un produit nommé "$name" existe déjà.');
-  }
+    if (existing != null) {
+      throw Exception('Un produit nommé "$name" existe déjà.');
+    }
 
-  final data = await _client.from('products').insert({
-    'name': name,
-    'category': category,
-    'supplier': supplier,
-    'initial_stock': initialStock,
-    'low_stock_threshold': lowStockThreshold,
-    'business_id': businessId,
-  }).select().single();
+    final data = await _client.from('products').insert({
+      'name': name,
+      'category': category,
+      'supplier': supplier,
+      'initial_stock': initialStock,
+      'low_stock_threshold': lowStockThreshold,
+      'business_id': businessId,
+    }).select().single();
 
-   return ProductModel.fromJson({
-    'id': data['id'],
-    'name': data['name'],
-    'category': data['category'],
-    'supplier': data['supplier'],
-    'initial_stock': data['initial_stock'],
-    'low_stock_threshold': data['low_stock_threshold'],
-    'current_stock': initialStock,
-    'created_at': data['created_at'],
-  });
+    return ProductModel.fromJson({
+      'id': data['id'],
+      'name': data['name'],
+      'category': data['category'],
+      'supplier': data['supplier'],
+      'initial_stock': data['initial_stock'],
+      'low_stock_threshold': data['low_stock_threshold'],
+      'current_stock': initialStock,
+      'created_at': data['created_at'],
+    });
   }
 
   Future<void> updateProduct({
@@ -131,7 +103,6 @@ class ProductRepository {
     int? lowStockThreshold,
   }) async {
     final updates = <String, dynamic>{};
-
     if (name != null) updates['name'] = name;
     if (category != null) updates['category'] = category;
     if (supplier != null) updates['supplier'] = supplier;
@@ -145,19 +116,27 @@ class ProductRepository {
     await _client.from('products').delete().eq('id', id);
   }
 
+  // --- CORRECTION DU BUG "4 à 7" ---
+  
   Future<void> updateStockManual(String productId, int newStock) async {
-    await _client.from('products').update({
-      'initial_stock': newStock,
-    }).eq('id', productId);
+    // On appelle la méthode unifiée en dessous
+    await updateProductStock(productId, newStock);
   }
-  Future<void> updateProductStock(String id, int newStock) async {
-  await _client
-      .from('products')
-      .update({
-        'initial_stock': newStock, // On définit le nouveau point de référence
-        'current_stock': newStock, // On aligne le stock actuel
-      })
-      .eq('id', id);
-}
 
+  Future<void> updateProductStock(String id, int newStock) async {
+  // 1. On force la mise à jour ou l'insertion (UPSERT) dans la table de stock
+  // Cela garantit que même si le produit n'avait pas de ligne de stock, elle est créée.
+  await _client
+      .from('product_current_stock')
+      .upsert({
+        'id': id, // L'ID du produit
+        'current_stock': newStock,
+        'last_updated': DateTime.now().toIso8601String(),
+      });
+
+  // 2. On synchronise l'initial_stock dans la table principale
+  await _client.from('products').update({
+    'initial_stock': newStock,
+  }).eq('id', id);
+}
 }
