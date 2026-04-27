@@ -44,14 +44,14 @@ class PaymentService {
   // --- MÉTHODES STATIQUES ---
 
   /// Retourne le prix pour un type donné
-  static double getPrice(SubscriptionType type) => _prices[type] ?? 1000;
+  static double getPrice(SubscriptionType type) => _prices[type] ?? 2500;
 
   /// Retourne le nom lisible pour l'UI
   static String getLabel(SubscriptionType type) {
     return _labels[type] ?? 'Inconnu';
   }
 
-  /// Retourne le prix formaté (ex: 1000 CFA)
+  /// Retourne le prix formaté (ex: 2500 CFA)
   static String getPriceLabel(SubscriptionType type) {
     final price = getPrice(type);
     if (price == 0) return 'Gratuit';

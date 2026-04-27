@@ -89,30 +89,37 @@ class ProductRepository {
     int lowStockThreshold = 10,
   }) async {
     final businessId = await _businessHelper.getBusinessId();
+      
+    final existing = await _client
+      .from('products')
+      .select('id')
+      .eq('business_id', businessId)
+      .ilike('name', name) // ilike est insensible à la casse (Malta == malta)
+      .maybeSingle();
 
-    final data = await _client
-        .from('products')
-        .insert({
-          'name': name,
-          'category': category,
-          'supplier': supplier,
-          'initial_stock': initialStock,
-          'low_stock_threshold': lowStockThreshold,
-          'business_id': businessId,
-        })
-        .select()
-        .single();
+  if (existing != null) {
+    throw Exception('Un produit nommé "$name" existe déjà.');
+  }
 
-    return ProductModel.fromJson({
-      'id': data['id'],
-      'name': data['name'],
-      'category': data['category'],
-      'supplier': data['supplier'],
-      'initial_stock': data['initial_stock'],
-      'low_stock_threshold': data['low_stock_threshold'],
-      'current_stock': initialStock,
-      'created_at': data['created_at'],
-    });
+  final data = await _client.from('products').insert({
+    'name': name,
+    'category': category,
+    'supplier': supplier,
+    'initial_stock': initialStock,
+    'low_stock_threshold': lowStockThreshold,
+    'business_id': businessId,
+  }).select().single();
+
+   return ProductModel.fromJson({
+    'id': data['id'],
+    'name': data['name'],
+    'category': data['category'],
+    'supplier': data['supplier'],
+    'initial_stock': data['initial_stock'],
+    'low_stock_threshold': data['low_stock_threshold'],
+    'current_stock': initialStock,
+    'created_at': data['created_at'],
+  });
   }
 
   Future<void> updateProduct({

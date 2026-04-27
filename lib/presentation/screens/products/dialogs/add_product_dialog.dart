@@ -146,18 +146,31 @@ class _AddProductDialogState extends ConsumerState<_AddProductDialog> {
     );
   }
 
-  Future<void> _submit() async {
-    final name = _nameCtrl.text.trim();
-    final category = _categoryCtrl.text.trim();
+// Dans la classe _AddProductDialogState, modifie la méthode _submit :
 
-    if (name.isEmpty || category.isEmpty) {
-      _showError('Nom et catégorie sont obligatoires');
-      return;
-    }
+Future<void> _submit() async {
+  // --- MODIFICATION : Normalisation du nom ---
+  String rawName = _nameCtrl.text.trim();
+  if (rawName.isEmpty) {
+    _showError('Le nom est obligatoire');
+    return;
+  }
+  
+  // Met la 1ère lettre en Majuscule et le reste en minuscule (malta -> Malta)
+  final name = rawName[0].toUpperCase() + rawName.substring(1).toLowerCase();
+  // --------------------------------------------
 
-    final stock = int.tryParse(_stockCtrl.text) ?? 0;
-    final threshold = int.tryParse(_thresholdCtrl.text) ?? 10;
+  final category = _categoryCtrl.text.trim();
 
+  if (category.isEmpty) {
+    _showError('La catégorie est obligatoire');
+    return;
+  }
+
+  final stock = int.tryParse(_stockCtrl.text) ?? 0;
+  final threshold = int.tryParse(_thresholdCtrl.text) ?? 10;
+
+  try { // Ajout du try/catch pour capturer l'erreur du Repository
     await ref
         .read(productNotifierProvider.notifier)
         .createProduct(
@@ -172,7 +185,10 @@ class _AddProductDialogState extends ConsumerState<_AddProductDialog> {
 
     ref.invalidate(productsProvider);
     if (mounted) Navigator.pop(context);
+  } catch (e) {
+    _showError(e.toString().replaceAll('Exception: ', ''));
   }
+}
 
   void _showError(String msg) {
     ScaffoldMessenger.of(

@@ -60,9 +60,9 @@ class SubscriptionModel {
       );
     } else {
       // Détection par montant si le champ type est absent
-      if (amt >= 5000) detectedType = SubscriptionType.premium;
-      else if (amt >= 2500) detectedType = SubscriptionType.elite;
-      else if (amt >= 1000) detectedType = SubscriptionType.base;
+      if (amt >= 10000) detectedType = SubscriptionType.premium;
+      else if (amt >= 5000) detectedType = SubscriptionType.elite;
+      else if (amt >= 2500) detectedType = SubscriptionType.base;
       else detectedType = SubscriptionType.trial;
     }
 

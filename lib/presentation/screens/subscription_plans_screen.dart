@@ -34,7 +34,7 @@ class SubscriptionPlansScreen extends StatelessWidget {
             _buildPlanCard(
               context,
               title: "BASE",
-              price: "1 000 CFA",
+              price: "2 500 CFA",
               color: Colors.blue,
               features: ["Ventes illimitées", "1 Utilisateur", "Rapports simples"],
               type: SubscriptionType.base,
@@ -43,7 +43,7 @@ class SubscriptionPlansScreen extends StatelessWidget {
             _buildPlanCard(
               context,
               title: "ELITE",
-              price: "2 500 CFA",
+              price: "5 000 CFA",
               color: Colors.purple,
               features: ["Tout de Base", "Gestion de Stock", "Multi-utilisateurs"],
               isPopular: true,
@@ -53,7 +53,7 @@ class SubscriptionPlansScreen extends StatelessWidget {
             _buildPlanCard(
               context,
               title: "PREMIUM",
-              price: "5 000 CFA",
+              price: "10 000 CFA",
               color: Colors.amber.shade800,
               features: ["Tout d'Elite", "Dépenses avancées", "Support Prioritaire"],
               type: SubscriptionType.premium,
