@@ -34,7 +34,7 @@ class SubscriptionPlansScreen extends StatelessWidget {
             _buildPlanCard(
               context,
               title: "BASE",
-              price: "2 500 CFA",
+              price: "1 000 CFA",
               color: Colors.blue,
               features: ["Ventes illimitées", "1 Utilisateur", "Rapports simples"],
               type: SubscriptionType.base,
@@ -42,10 +42,19 @@ class SubscriptionPlansScreen extends StatelessWidget {
             const SizedBox(height: 20),
             _buildPlanCard(
               context,
+              title: "MEDIUM",
+              price: "2 500 CFA",
+              color: Colors.teal,
+              features: ["Tout de Base", "Gestion de Stock", "2 Utilisateurs"],
+              type: SubscriptionType.medium,
+            ),
+            const SizedBox(height: 20),
+            _buildPlanCard(
+              context,
               title: "ELITE",
               price: "5 000 CFA",
               color: Colors.purple,
-              features: ["Tout de Base", "Gestion de Stock", "Multi-utilisateurs"],
+              features: ["Tout de Medium", "Multi-utilisateurs", "Dépenses avancées"],
               isPopular: true,
               type: SubscriptionType.elite,
             ),
@@ -55,7 +64,7 @@ class SubscriptionPlansScreen extends StatelessWidget {
               title: "PREMIUM",
               price: "10 000 CFA",
               color: Colors.amber.shade800,
-              features: ["Tout d'Elite", "Dépenses avancées", "Support Prioritaire"],
+              features: ["Tout d'Elite", "Support prioritaire", "Toutes fonctions"],
               type: SubscriptionType.premium,
             ),
             const SizedBox(height: 30),
@@ -89,8 +98,8 @@ class SubscriptionPlansScreen extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 24, 
-                    fontWeight: FontWeight.bold, 
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
                     color: color,
                     letterSpacing: 1.2
                   ),
@@ -134,15 +143,25 @@ class SubscriptionPlansScreen extends StatelessWidget {
                       ),
                       elevation: 0,
                     ),
-                    onPressed: () {
-                      // 🟢 REDIRECTION VERS LE DIALOGUE DE PAIEMENT MANUEL
-                      showDialog(
+                    onPressed: () async {
+                      // 🆕 Ouverture du dialogue + gestion du retour
+                      final result = await showDialog<bool>(
                         context: context,
                         builder: (context) => ManualPaymentDialog(
+                          planType: type,
                           planTitle: title,
                           amount: price,
                         ),
                       );
+
+                      // 🆕 POINT 1 : Après le choix du forfait → retour à l'accueil
+                      if (result == true && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text(
+                              "✅ Demande envoyée ! Votre compte sera activé après vérification du paiement.")),
+                        );
+                        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                      }
                     },
                     child: const Text(
                       "S'abonner maintenant",

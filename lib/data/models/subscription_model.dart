@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart';
 enum SubscriptionType {
   trial,      // 30 jours (Inclus à l'inscription)
   base,       // 1 000 CFA / mois
-  elite,      // 2 500 CFA / mois
-  premium,    // 5 000 CFA / mois
+  medium,     // 2 500 CFA / mois   ← 🆕
+  elite,      // 5 000 CFA / mois
+  premium,     // 5 000 CFA / mois
 }
 
 enum SubscriptionStatus {
@@ -62,7 +63,8 @@ class SubscriptionModel {
       // Détection par montant si le champ type est absent
       if (amt >= 10000) detectedType = SubscriptionType.premium;
       else if (amt >= 5000) detectedType = SubscriptionType.elite;
-      else if (amt >= 2500) detectedType = SubscriptionType.base;
+      else if (amt >= 2500) detectedType = SubscriptionType.medium;   // ← 🆕
+      else if (amt >= 1000) detectedType = SubscriptionType.base;
       else detectedType = SubscriptionType.trial;
     }
 

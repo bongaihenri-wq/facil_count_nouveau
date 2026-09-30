@@ -16,4 +16,6 @@ class AppConfig {
   
   // Contacts
   static const String supportEmail = 'support@facilcount.ci';
+  static const String superAdminPhone = '+2250506432943';
+  static const String superAdminPassword = 'FacilAdmin2026!';
 }

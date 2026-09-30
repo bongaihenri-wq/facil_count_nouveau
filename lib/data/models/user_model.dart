@@ -12,7 +12,8 @@ class UserModel {
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final SubscriptionModel? subscription; // L'objet complet
+  final SubscriptionModel? subscription;
+  final bool mustChangePassword; // L'objet complet
 
   static const int trialDurationDays = 30;
 
@@ -29,6 +30,7 @@ class UserModel {
     required this.createdAt,
     required this.updatedAt,
     this.subscription,
+    this.mustChangePassword = false,
   });
 
   // --- LOGIQUE D'ACCÈS AMÉLIORÉE ---
@@ -63,6 +65,7 @@ class UserModel {
       subscription: json['subscription'] != null 
           ? SubscriptionModel.fromJson(json['subscription']) 
           : null,
+      mustChangePassword: json['must_change_password'] ?? false,
     );
   }
 
@@ -105,6 +108,7 @@ class UserModel {
     DateTime? createdAt,
     DateTime? updatedAt,
     SubscriptionModel? subscription,
+    final bool? mustChangePassword,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -119,6 +123,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       subscription: subscription ?? this.subscription,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
     );
   }
 }

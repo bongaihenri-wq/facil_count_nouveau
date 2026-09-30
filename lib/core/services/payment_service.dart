@@ -26,9 +26,10 @@ class PaymentService {
   static bool simulationMode = true;
 
   // Configuration des prix
-  static const Map<SubscriptionType, double> _prices = {
+ static const Map<SubscriptionType, double> _prices = {
     SubscriptionType.trial: 0,
-    SubscriptionType.base: 2500,
+    SubscriptionType.base: 1000,
+    SubscriptionType.medium: 2500,     // ← 🆕
     SubscriptionType.elite: 5000,
     SubscriptionType.premium: 10000,
   };
@@ -37,6 +38,7 @@ class PaymentService {
   static const Map<SubscriptionType, String> _labels = {
     SubscriptionType.trial: 'Essai Gratuit',
     SubscriptionType.base: 'Forfait Base',
+    SubscriptionType.medium: 'Forfait Medium',   // ← 🆕
     SubscriptionType.elite: 'Forfait Elite',
     SubscriptionType.premium: 'Forfait Premium',
   };

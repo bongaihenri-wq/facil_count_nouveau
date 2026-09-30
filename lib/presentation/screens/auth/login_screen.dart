@@ -1,10 +1,12 @@
+import 'package:facil_count_nouveau/core/services/secure_storage_service.dart';
+import 'package:facil_count_nouveau/presentation/screens/auth/change_password_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '/../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import 'register_screen.dart';
-import '../home/admin_dashboard_screen.dart';
-import '../home/user_dashboard_screen.dart';
+import 'forgot_password_screen.dart';
+import '../super_admin/super_admin_dashboard_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -25,8 +27,49 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
+    @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+  }
 
-  Future<void> _submit() async {
+  /// 🔄 Redirige directement si une session existe déjà
+  Future<void> _restoreSession() async {
+    final token = await SecureStorageService.getToken();
+    if (token == null || !mounted) return; // Pas de session → reste sur login
+
+    // Restaure le user depuis Supabase
+    await ref.read(authProvider.notifier).initialize();
+    if (!mounted) return;
+
+    final user = ref.read(authProvider).currentUser;
+    if (user == null) return; // Session invalide → reste sur login
+
+    // 1. Changement de mot de passe forcé
+    if (user.mustChangePassword) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChangePasswordScreen(phoneNumber: user.phoneNumber),
+        ),
+      );
+      return;
+    }
+
+    // 2. Super admin
+    if (user.role == 'super_admin') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),
+      );
+      return;
+    }
+
+    // 3. Utilisateur normal → accueil
+    Navigator.pushReplacementNamed(context, '/');
+  }
+
+ Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
     final success = await ref.read(authProvider.notifier).login(
@@ -34,10 +77,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _passwordController.text,
     );
 
-    if (success && mounted) {
-      final isAdmin = ref.read(authProvider).isAdmin;
-      Navigator.pushReplacementNamed(context, '/');
+    if (!success || !mounted) return; // 🆕 Échec = on reste ici, point final
+
+    final user = ref.read(authProvider).currentUser;
+    if (user == null) return; // 🆕 Double sécurité : pas de user, pas de navigation
+
+    // 🆕 1. Changement de mot de passe forcé (MDP temporaire)
+    if (user.mustChangePassword) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              ChangePasswordScreen(phoneNumber: user.phoneNumber),
+        ),
+      );
+      return;
     }
+
+    // 2. Super Admin (identifiants en dur)
+    if (user.role == 'super_admin') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),
+      );
+      return;
+    }
+
+    // 3. Navigation normale
+    Navigator.pushReplacementNamed(context, '/');
   }
 
   @override
@@ -196,11 +263,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 8),
                           
-                          // Mot de passe oublié
+                          // 🆕 Mot de passe oublié — MAINTENANT BRANCHÉ
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ForgotPasswordScreen(),
+                                  ),
+                                );
+                              },
                               style: TextButton.styleFrom(
                                 foregroundColor: AppColors.primary,
                               ),

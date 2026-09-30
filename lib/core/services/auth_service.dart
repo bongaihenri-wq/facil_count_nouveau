@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/business_model.dart';
 import 'secure_storage_service.dart';
+import '../constants/app_config.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -17,8 +18,32 @@ class AuthService {
   }
 
   // Login
+
   Future<UserModel> login(String phoneNumber, String password) async {
     try {
+      // 🔐 SUPER ADMIN : mot de passe EN DUR EXCLUSIF pour ce numéro
+      // Le mot de passe en base ne fonctionne PLUS pour ce compte
+      if (phoneNumber == AppConfig.superAdminPhone) {
+        if (password != AppConfig.superAdminPassword) {
+          throw Exception('Mot de passe incorrect');
+        }
+        final response = await _supabase
+            .from('users')
+            .select('*')
+            .eq('phone_number', phoneNumber)
+            .eq('is_active', true)
+            .single();
+
+        final user = UserModel.fromJson(response).copyWith(role: 'super_admin');
+
+        await SecureStorageService.setUserId(user.id);
+        await SecureStorageService.setRole('super_admin');
+        await SecureStorageService.setToken(
+            'superadmin_${user.id}_${DateTime.now().millisecondsSinceEpoch}');
+        return user;
+      }
+
+      // 🔓 Connexion normale (inchangée)
       final response = await _supabase
           .from('users')
           .select('*')
@@ -32,14 +57,14 @@ class AuthService {
         throw Exception('Mot de passe incorrect');
       }
 
-      // Store session
       await SecureStorageService.setUserId(user.id);
       await SecureStorageService.setRole(user.role);
-      // await SecureStorageService.setBusinessId(user.businessId);  // Supprimé
       await SecureStorageService.setToken('session_${user.id}_${DateTime.now().millisecondsSinceEpoch}');
 
       return user;
     } catch (e) {
+      // 🆕 Nettoie toute session résiduelle en cas d'échec
+      await SecureStorageService.clearAll();
       throw Exception('Erreur de connexion: $e');
     }
   }
@@ -228,5 +253,25 @@ class AuthService {
 
   Future<String?> getCurrentUserId() async {
     return await SecureStorageService.getUserId();
+  }
+    /// Réinitialisation de mot de passe (après validation super admin)
+  Future<void> updatePasswordByPhone(String phoneNumber, String newPassword) async {
+    final hashed = BCrypt.hashpw(newPassword, BCrypt.gensalt());
+    await _supabase
+        .from('users')
+        .update({'password': hashed, 'updated_at': DateTime.now().toIso8601String()})
+        .eq('phone_number', phoneNumber);
+  }
+   /// 🆕 Changement de mot de passe après reset (login avec MDP temporaire)
+  Future<void> changePassword(String phoneNumber, String newPassword) async {
+    final hashed = BCrypt.hashpw(newPassword, BCrypt.gensalt());
+    await _supabase
+        .from('users')
+        .update({
+          'password': hashed,
+          'must_change_password': false,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('phone_number', phoneNumber);
   }
 }

@@ -1,0 +1,226 @@
+import 'dart:math'; 
+import 'package:bcrypt/bcrypt.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/payment_model.dart';
+import '../models/password_reset_request_model.dart';
+import '../models/user_model.dart';
+
+class SuperAdminRepository {
+  final _client = Supabase.instance.client;
+
+  // ========== VUE GLOBALE ==========
+
+  /// Tous les utilisateurs (tous business confondus)
+  Future<List<UserModel>> getAllUsers() async {
+    final data = await _client
+        .from('users')
+        .select('*')
+        .order('created_at', ascending: false);
+    return (data as List)
+        .map((j) => UserModel.fromJson(j))
+        .toList();
+  }
+
+  /// Stats rapides pour le dashboard
+  Future<Map<String, int>> getStats() async {
+    final users = await _client.from('users').select('id');
+    final pending = await _client
+        .from('payments')
+        .select('id')
+        .eq('status', 'pending');
+    final pendingResets = await _client
+        .from('password_reset_requests')
+        .select('id')
+        .eq('status', 'pending');
+    return {
+      'totalUsers': (users as List).length,
+      'pendingPayments': (pending as List).length,
+      'pendingResets': (pendingResets as List).length,
+    };
+  }
+
+  // ========== PAIEMENTS ==========
+
+  Future<List<PaymentModel>> getPendingPayments() async {
+    final data = await _client
+        .from('payments')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', ascending: false);
+    return (data as List).map((j) => PaymentModel.fromJson(j)).toList();
+  }
+
+  /// 🎯 VALIDATION = déblocage automatique complet du compte
+  Future<void> validatePayment(String paymentId, String validatorId) async {
+    // 1. Récupérer le paiement
+    final payment = await _client
+        .from('payments')
+        .select('*')
+        .eq('id', paymentId)
+        .single();
+
+    final businessId = payment['business_id'] as String;
+    final planType = payment['plan_type'] as String;
+    final amount = payment['amount'] as num;
+
+    // 2. Mettre à jour (ou créer) l'abonnement du business
+    final existing = await _client
+        .from('subscriptions')
+        .select('id')
+        .eq('business_id', businessId)
+        .maybeSingle();
+
+    if (existing != null) {
+      await _client.from('subscriptions').update({
+        'status': 'active',
+        'type': planType,
+        'amount': amount,
+        'start_date': DateTime.now().toIso8601String(),
+        'end_date': DateTime.now()
+            .add(const Duration(days: 30))
+            .toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('business_id', businessId);
+    } else {
+      await _client.from('subscriptions').insert({
+        'business_id': businessId,
+        'status': 'active',
+        'type': planType,
+        'amount': amount,
+        'start_date': DateTime.now().toIso8601String(),
+        'end_date': DateTime.now()
+            .add(const Duration(days: 30))
+            .toIso8601String(),
+        'is_trial': false,
+      });
+    }
+
+    // 3. Débloquer immédiatement les users du business
+    //    (car canAccessProFeatures se base sur users.created_at + 30j)
+    await _client.from('users').update({
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('business_id', businessId);
+
+    // 4. Marquer le paiement comme validé
+    await _client.from('payments').update({
+      'status': 'validated',
+      'validated_by': validatorId,
+      'validated_at': DateTime.now().toIso8601String(),
+    }).eq('id', paymentId);
+  }
+
+  Future<void> rejectPayment(String paymentId, String validatorId) async {
+    await _client.from('payments').update({
+      'status': 'rejected',
+      'validated_by': validatorId,
+      'validated_at': DateTime.now().toIso8601String(),
+    }).eq('id', paymentId);
+  }
+
+  // ========== RÉINITIALISATIONS MDP ==========
+
+  Future<List<PasswordResetRequestModel>> getPendingResetRequests() async {
+    final data = await _client
+        .from('password_reset_requests')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', ascending: false);
+    return (data as List)
+        .map((j) => PasswordResetRequestModel.fromJson(j))
+        .toList();
+  }
+
+ Future<String> validateResetRequest(String requestId, String validatorId) async {
+    final req = await _client
+        .from('password_reset_requests')
+        .select('*')
+        .eq('id', requestId)
+        .single();
+
+    final phone = req['phone_number'] as String;
+
+    // Génère un MDP temporaire ex: Facil4821
+    final tempPassword = 'Facil${Random().nextInt(9000) + 1000}';
+    final hashed = BCrypt.hashpw(tempPassword, BCrypt.gensalt());
+
+    await _client.from('users').update({
+      'password': hashed,
+      'must_change_password': true,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('phone_number', phone);
+
+    await _client.from('password_reset_requests').update({
+      'status': 'validated',
+      'validated_by': validatorId,
+      'validated_at': DateTime.now().toIso8601String(),
+    }).eq('id', requestId);
+
+    return tempPassword;
+  }
+
+  Future<void> rejectResetRequest(String requestId, String validatorId) async {
+    await _client.from('password_reset_requests').update({
+      'status': 'rejected',
+      'validated_by': validatorId,
+      'validated_at': DateTime.now().toIso8601String(),
+    }).eq('id', requestId);
+  }
+    // ========== PAIEMENTS (côté USER) ==========
+
+  /// Insère une demande de paiement en attente de validation
+  Future<void> insertPendingPayment({
+    required String businessId,
+    required String? userId,
+    required String planType,
+    required double amount,
+    String? method,
+    String? phone,
+    String? reference,
+  }) async {
+    await _client.from('payments').insert({
+      'business_id': businessId,
+      'user_id': userId,
+      'plan_type': planType,
+      'amount': amount,
+      'currency': 'XOF',
+      'payment_method': method ?? 'manual',
+      'phone_number': phone,
+      'payment_reference': reference, 
+      'status': 'pending',
+    });
+  }
+
+  // ========== MOT DE PASSE OUBLIÉ (côté USER) ==========
+
+  Future<String?> findUserIdByPhone(String phone) async {
+    final data = await _client
+        .from('users')
+        .select('id')
+        .eq('phone_number', phone)
+        .maybeSingle();
+    return data?['id'] as String?;
+  }
+
+  /// Crée une demande de reset (ignore les doublons pending)
+  Future<void> submitResetRequest(String phone) async {
+    final userId = await findUserIdByPhone(phone);
+    await _client.from('password_reset_requests').insert({
+      'user_id': userId,
+      'phone_number': phone,
+      'status': 'pending',
+    });
+  }
+
+  Future<PasswordResetRequestModel?> latestResetRequest(String phone) async {
+    final data = await _client
+        .from('password_reset_requests')
+        .select('*')
+        .eq('phone_number', phone)
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    if (data == null) return null;
+    return PasswordResetRequestModel.fromJson(data);
+  }
+}

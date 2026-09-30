@@ -5,6 +5,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/widgets/auth_gate.dart';
+
 
 // Screens
 import 'presentation/screens/home/home_screen.dart';
@@ -128,8 +130,8 @@ class FacilCountApp extends StatelessWidget {
           child: child!,
         );
       },
-      routes: {
-        '/': (context) => const HomeScreen(),
+       routes: {
+        '/': (context) => const AuthGate(child: HomeScreen()),
         '/dashboard': (context) => const DashboardScreen(),
         '/purchases': (context) => const PurchaseScreen(),
         '/sales': (context) => const SaleScreen(),
@@ -142,7 +144,7 @@ class FacilCountApp extends StatelessWidget {
         // ✅ Routes User Profil
         '/profile': (context) => const ProfileScreen(),
         '/user-management': (context) => const UserManagementScreen(),
-        '/admin-dashboard': (context) => const AdminDashboardScreen(),
+        '/admin-dashboard': (context) => const AuthGate(child: AdminDashboardScreen()),
       },
       initialRoute: '/login',
     );

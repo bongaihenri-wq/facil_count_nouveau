@@ -33,7 +33,6 @@ class LicenseService {
   Future<SubscriptionModel> _createTrial(String businessId) async {
     final now = DateTime.now();
     final data = {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'business_id': businessId,
       'type': 'trial',
       'status': 'active',
@@ -71,19 +70,26 @@ class LicenseService {
   }
 
   // Méthode Renew déjà fournie précédemment...
-  Future<SubscriptionModel> renewSubscription(String bId, SubscriptionType type, {required String paymentMethod, required String transactionId}) async {
-    // ... (Code du renewSubscription précédent)
+  Future<SubscriptionModel> renewSubscription(String bId, SubscriptionType type,
+      {required String paymentMethod, required String transactionId}) async {
     final now = DateTime.now();
     final data = {
-      'business_id': bId,
       'type': type.name,
       'status': 'active',
       'start_date': now.toIso8601String(),
       'end_date': now.add(const Duration(days: 30)).toIso8601String(),
       'is_trial': false,
-      'metadata': {'method': paymentMethod, 'tx': transactionId}
+      'payment_method': paymentMethod,
+      'payment_reference': transactionId,
+      'updated_at': now.toIso8601String(),
     };
-    final res = await _client.from('subscriptions').insert(data).select().single();
+
+    final res = await _client
+        .from('subscriptions')
+        .update(data)              // ✅ UPDATE au lieu d'INSERT
+        .eq('business_id', bId)
+        .select()
+        .single();
     return SubscriptionModel.fromJson(res);
   }
 }

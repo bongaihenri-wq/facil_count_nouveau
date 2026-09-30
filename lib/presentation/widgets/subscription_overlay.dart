@@ -1,9 +1,8 @@
 import 'package:facil_count_nouveau/presentation/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // Nécessaire pour ConsumerWidget
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../screens/subscription_plans_screen.dart';
 
-// On change StatelessWidget en ConsumerWidget pour accéder à "ref"
 class SubscriptionOverlay extends ConsumerWidget {
   final String? message;
 
@@ -13,9 +12,20 @@ class SubscriptionOverlay extends ConsumerWidget {
   });
 
   @override
-  // On ajoute WidgetRef ref ici
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
+      // 🆕 POINT 2 : AppBar avec flèche de retour vers la page précédente
+      appBar: AppBar(
+        backgroundColor: Colors.orange,
+        foregroundColor: Colors.white,
+        title: const Text('Accès limité'),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Retour',
+          onPressed: () => Navigator.maybePop(context),
+        ),
+      ),
       body: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(30.0),
@@ -32,7 +42,6 @@ class SubscriptionOverlay extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Icône stylisée
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -47,7 +56,6 @@ class SubscriptionOverlay extends ConsumerWidget {
             ),
             const SizedBox(height: 40),
 
-            // Titre principal
             const Text(
               "Accès Limité",
               style: TextStyle(
@@ -59,7 +67,6 @@ class SubscriptionOverlay extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
 
-            // Message explicatif
             Text(
               message ??
                   "Votre période d'essai est arrivée à son terme ou votre abonnement a expiré. Pour continuer à gérer vos ventes et vos stocks, merci de choisir un forfait.",
@@ -72,8 +79,7 @@ class SubscriptionOverlay extends ConsumerWidget {
             ),
             const SizedBox(height: 50),
 
-            // Bouton d'action principal
-            SArea(
+            SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
@@ -102,7 +108,6 @@ class SubscriptionOverlay extends ConsumerWidget {
 
             const SizedBox(height: 15),
 
-            // Bouton de rafraîchissement (Maintenant fonctionnel avec ref)
             OutlinedButton.icon(
               icon: const Icon(Icons.refresh),
               label: const Text("Vérifier mon paiement"),
@@ -111,22 +116,23 @@ class SubscriptionOverlay extends ConsumerWidget {
                 side: const BorderSide(color: Colors.orange),
               ),
               onPressed: () async {
-                // Affiche un petit indicateur visuel
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Vérification en cours...")),
                 );
-                
-                // Appelle la fonction de rafraîchissement
                 await ref.read(authProvider.notifier).refreshSubscriptionStatus();
               },
             ),
 
             const SizedBox(height: 20),
 
-            // Bouton de déconnexion (Activé lui aussi)
+            // 🆕 POINT 2 : Déconnexion → nettoie ET retourne au login
             TextButton(
               onPressed: () async {
                 await ref.read(authProvider.notifier).logout();
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                      context, '/login', (route) => false);
+                }
               },
               child: Text(
                 "Se déconnecter",
@@ -137,22 +143,5 @@ class SubscriptionOverlay extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-// Widget utilitaire inchangé
-class SArea extends StatelessWidget {
-  final Widget child;
-  final double width;
-  final double height;
-  const SArea(
-      {super.key,
-      required this.child,
-      required this.width,
-      required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(width: width, height: height, child: child);
   }
 }
