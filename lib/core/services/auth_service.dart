@@ -8,7 +8,8 @@ import '../constants/app_config.dart';
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Hash password
+  // ==================== HELPERS ====================
+
   String _hashPassword(String password) {
     return BCrypt.hashpw(password, BCrypt.gensalt());
   }
@@ -17,60 +18,52 @@ class AuthService {
     return BCrypt.checkpw(password, hashed);
   }
 
-  // Login
+  /// Convertit un téléphone en email synthétique (JWT)
+  static String phoneToEmail(String phone) =>
+      '${phone.replaceAll(RegExp(r'[^0-9]'), '')}@phone.facilcount.app';
 
-  Future<UserModel> login(String phoneNumber, String password) async {
+  // ==================== LOGIN ====================
+
+    Future<UserModel> login(String phoneNumber, String password) async {
     try {
-      // 🔐 SUPER ADMIN : mot de passe EN DUR EXCLUSIF pour ce numéro
-      // Le mot de passe en base ne fonctionne PLUS pour ce compte
-      if (phoneNumber == AppConfig.superAdminPhone) {
-        if (password != AppConfig.superAdminPassword) {
-          throw Exception('Mot de passe incorrect');
-        }
-        final response = await _supabase
-            .from('users')
-            .select('*')
-            .eq('phone_number', phoneNumber)
-            .eq('is_active', true)
-            .single();
+      // 🔐 Login JWT unifié — tout le monde passe par Supabase Auth
+      // (mot de passe vérifié côté SERVEUR, jamais dans le code)
+      final res = await _supabase.auth.signInWithPassword(
+        email: phoneToEmail(phoneNumber),
+        password: password,
+      );
+      if (res.user == null) throw Exception('Échec de la connexion');
 
-        final user = UserModel.fromJson(response).copyWith(role: 'super_admin');
-
-        await SecureStorageService.setUserId(user.id);
-        await SecureStorageService.setRole('super_admin');
-        await SecureStorageService.setToken(
-            'superadmin_${user.id}_${DateTime.now().millisecondsSinceEpoch}');
-        return user;
-      }
-
-      // 🔓 Connexion normale (inchangée)
-      final response = await _supabase
+      final data = await _supabase
           .from('users')
           .select('*')
-          .eq('phone_number', phoneNumber)
+          .eq('id', res.user!.id)
           .eq('is_active', true)
           .single();
 
-      final user = UserModel.fromJson(response);
-
-      if (!_verifyPassword(password, user.password)) {
-        throw Exception('Mot de passe incorrect');
-      }
+      final user = UserModel.fromJson(data);
 
       await SecureStorageService.setUserId(user.id);
       await SecureStorageService.setRole(user.role);
-      await SecureStorageService.setToken('session_${user.id}_${DateTime.now().millisecondsSinceEpoch}');
-
+      await SecureStorageService.setToken(
+          res.session?.accessToken ?? 'jwt_session');
       return user;
+    } on AuthException catch (e) {
+      await SecureStorageService.clearAll();
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid') || msg.contains('not found') ||
+          msg.contains('credentials') || msg.contains('confirmed')) {
+        throw Exception('Numéro ou mot de passe incorrect');
+      }
+      throw Exception('Erreur de connexion: ${e.message}');
     } catch (e) {
-      // 🆕 Nettoie toute session résiduelle en cas d'échec
       await SecureStorageService.clearAll();
       throw Exception('Erreur de connexion: $e');
     }
   }
+  // ==================== INSCRIPTION (inchangée) ====================
 
-  // Register - Creates business + admin user
-  Future<UserModel> registerUser({
+   Future<UserModel> registerUser({
     required String phoneNumber,
     required String password,
     required String businessName,
@@ -81,64 +74,52 @@ class AuthService {
     bool isAdmin = true,
   }) async {
     try {
-      // 1. Create Business
-      final businessResponse = await _supabase
-          .from('businesses')
-          .insert({
-            'name': businessName,
-            'type': businessType,
-            'city': '',
-            'country': "Côte d'Ivoire",
-          })
-          .select()
-          .single();
+      final res = await _supabase.functions.invoke('register-business', body: {
+        'phoneNumber': phoneNumber,
+        'password': password,
+        'businessName': businessName,
+        'businessType': businessType,
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+      });
 
-      final business = BusinessModel.fromJson(businessResponse);
+      if (res.status != 200) {
+        throw Exception(res.data['error'] ?? "Erreur d'inscription");
+      }
 
-      // 2. Create Admin User
-      final hashedPassword = _hashPassword(password);
-      
-      final userResponse = await _supabase
-          .from('users')
-          .insert({
-            'phone_number': phoneNumber,
-            'password': hashedPassword,
-            'business_id': business.id,
-            'role': isAdmin ? 'admin' : 'user',
-            'first_name': firstName,
-            'last_name': lastName,
-            'email': email,
-            'is_active': true,
-          })
-          .select()
-          .single();
-
-      final user = UserModel.fromJson(userResponse);
-
-      // 3. Store session
-      await SecureStorageService.setUserId(user.id);
-      await SecureStorageService.setRole(user.role);
-      // await SecureStorageService.setBusinessId(user.businessId);  // Supprimé
-      await SecureStorageService.setToken('session_${user.id}_${DateTime.now().millisecondsSinceEpoch}');
-
-      return user;
+      // 🆕 Connexion automatique (le compte auth vient d'être créé)
+      return await login(phoneNumber, password);
     } catch (e) {
-      throw Exception("Erreur d'inscription: $e");
+      throw Exception(
+          "Erreur d'inscription: ${e.toString().replaceAll('Exception: ', '')}");
     }
   }
 
-  // Get current user from storage
+  // ==================== SESSION ====================
+
   Future<UserModel?> getCurrentUser() async {
+    // 🆕 Session Supabase d'abord
+    final authUser = _supabase.auth.currentUser;
+    if (authUser != null) {
+      try {
+        final data = await _supabase
+            .from('users')
+            .select('*')
+            .eq('id', authUser.id)
+            .single();
+        return UserModel.fromJson(data);
+      } catch (_) {}
+    }
+    // Fallback legacy
     final userId = await SecureStorageService.getUserId();
     if (userId == null) return null;
-
     try {
       final response = await _supabase
           .from('users')
           .select('*')
           .eq('id', userId)
           .single();
-
       return UserModel.fromJson(response);
     } catch (e) {
       await logout();
@@ -146,13 +127,41 @@ class AuthService {
     }
   }
 
-  // Nouvelle méthode pour récupérer le business_id
   Future<String?> getCurrentBusinessId() async {
     final user = await getCurrentUser();
     return user?.businessId;
   }
 
-  // Update user
+  Future<String?> getCurrentUserId() async {
+    final authUser = _supabase.auth.currentUser;
+    if (authUser != null) return authUser.id;
+    return await SecureStorageService.getUserId();
+  }
+
+  Future<bool> isLoggedIn() async {
+    if (_supabase.auth.currentUser != null) return true;
+    final token = await SecureStorageService.getToken();
+    return token != null;
+  }
+
+  Future<String?> getUserRole() async {
+    final authUser = _supabase.auth.currentUser;
+    if (authUser != null) {
+      final roleClaim = authUser.userMetadata?['role'];
+      if (roleClaim is String) return roleClaim;
+    }
+    return await SecureStorageService.getRole();
+  }
+
+  Future<void> logout() async {
+    try {
+      await _supabase.auth.signOut();
+    } catch (_) {}
+    await SecureStorageService.clearAll();
+  }
+
+  // ==================== GESTION USERS (inchangée) ====================
+
   Future<UserModel> updateUser(String userId, Map<String, dynamic> data) async {
     try {
       if (data.containsKey('password') && data['password'] != null) {
@@ -172,8 +181,7 @@ class AuthService {
     }
   }
 
-  // Create additional user
-  Future<UserModel> createUser({
+    Future<UserModel> createUser({
     required String phoneNumber,
     required String password,
     required String businessId,
@@ -182,31 +190,27 @@ class AuthService {
     String? email,
     String role = 'user',
   }) async {
-    try {
-      final hashedPassword = _hashPassword(password);
-      
-      final response = await _supabase
-          .from('users')
-          .insert({
-            'phone_number': phoneNumber,
-            'password': hashedPassword,
-            'business_id': businessId,
-            'role': role,
-            'first_name': firstName,
-            'last_name': lastName,
-            'email': email,
-            'is_active': true,
-          })
-          .select()
-          .single();
+    final res = await _supabase.functions.invoke('admin-create-user', body: {
+      'phoneNumber': phoneNumber,
+      'password': password,
+      'firstName': firstName,
+      'lastName': lastName,
+      'email': email,
+      'role': role,
+    });
 
-      return UserModel.fromJson(response);
-    } catch (e) {
-      throw Exception("Erreur création utilisateur: $e");
+    if (res.status != 200) {
+      throw Exception(res.data['error'] ?? 'Erreur création utilisateur');
     }
+
+    final data = await _supabase
+        .from('users')
+        .select('*')
+        .eq('phone_number', phoneNumber)
+        .single();
+    return UserModel.fromJson(data);
   }
 
-  // Get users by business
   Future<List<UserModel>> getBusinessUsers(String businessId) async {
     try {
       final response = await _supabase
@@ -223,7 +227,6 @@ class AuthService {
     }
   }
 
-  // Toggle user active status
   Future<void> toggleUserStatus(String userId, bool isActive) async {
     try {
       await _supabase
@@ -235,35 +238,25 @@ class AuthService {
     }
   }
 
-  // Logout
-  Future<void> logout() async {
-    await SecureStorageService.clearAll();
-  }
+  // ==================== MOT DE PASSE ====================
 
-  // Check if logged in
-  Future<bool> isLoggedIn() async {
-    final token = await SecureStorageService.getToken();
-    return token != null;
-  }
-
-  // Get user role
-  Future<String?> getUserRole() async {
-    return await SecureStorageService.getRole();
-  }
-
-  Future<String?> getCurrentUserId() async {
-    return await SecureStorageService.getUserId();
-  }
-    /// Réinitialisation de mot de passe (après validation super admin)
   Future<void> updatePasswordByPhone(String phoneNumber, String newPassword) async {
     final hashed = BCrypt.hashpw(newPassword, BCrypt.gensalt());
     await _supabase
         .from('users')
-        .update({'password': hashed, 'updated_at': DateTime.now().toIso8601String()})
+        .update({
+          'password': hashed,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
         .eq('phone_number', phoneNumber);
   }
-   /// 🆕 Changement de mot de passe après reset (login avec MDP temporaire)
+
   Future<void> changePassword(String phoneNumber, String newPassword) async {
+    // 1. Met à jour côté Supabase Auth (si session Supabase active)
+    try {
+      await _supabase.auth.updateUser(UserAttributes(password: newPassword));
+    } catch (_) {}
+    // 2. Sync public.users + retire le flag
     final hashed = BCrypt.hashpw(newPassword, BCrypt.gensalt());
     await _supabase
         .from('users')

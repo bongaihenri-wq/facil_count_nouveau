@@ -1,5 +1,3 @@
-import 'dart:math'; 
-import 'package:bcrypt/bcrypt.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/payment_model.dart';
 import '../models/password_reset_request_model.dart';
@@ -16,18 +14,14 @@ class SuperAdminRepository {
         .from('users')
         .select('*')
         .order('created_at', ascending: false);
-    return (data as List)
-        .map((j) => UserModel.fromJson(j))
-        .toList();
+    return (data as List).map((j) => UserModel.fromJson(j)).toList();
   }
 
   /// Stats rapides pour le dashboard
   Future<Map<String, int>> getStats() async {
     final users = await _client.from('users').select('id');
-    final pending = await _client
-        .from('payments')
-        .select('id')
-        .eq('status', 'pending');
+    final pending =
+        await _client.from('payments').select('id').eq('status', 'pending');
     final pendingResets = await _client
         .from('password_reset_requests')
         .select('id')
@@ -39,7 +33,7 @@ class SuperAdminRepository {
     };
   }
 
-  // ========== PAIEMENTS ==========
+  // ========== PAIEMENTS (super admin) ==========
 
   Future<List<PaymentModel>> getPendingPayments() async {
     final data = await _client
@@ -52,7 +46,6 @@ class SuperAdminRepository {
 
   /// 🎯 VALIDATION = déblocage automatique complet du compte
   Future<void> validatePayment(String paymentId, String validatorId) async {
-    // 1. Récupérer le paiement
     final payment = await _client
         .from('payments')
         .select('*')
@@ -96,7 +89,6 @@ class SuperAdminRepository {
     }
 
     // 3. Débloquer immédiatement les users du business
-    //    (car canAccessProFeatures se base sur users.created_at + 30j)
     await _client.from('users').update({
       'created_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
@@ -118,7 +110,7 @@ class SuperAdminRepository {
     }).eq('id', paymentId);
   }
 
-  // ========== RÉINITIALISATIONS MDP ==========
+  // ========== RÉINITIALISATIONS MDP (super admin) ==========
 
   Future<List<PasswordResetRequestModel>> getPendingResetRequests() async {
     final data = await _client
@@ -131,32 +123,16 @@ class SuperAdminRepository {
         .toList();
   }
 
- Future<String> validateResetRequest(String requestId, String validatorId) async {
-    final req = await _client
-        .from('password_reset_requests')
-        .select('*')
-        .eq('id', requestId)
-        .single();
-
-    final phone = req['phone_number'] as String;
-
-    // Génère un MDP temporaire ex: Facil4821
-    final tempPassword = 'Facil${Random().nextInt(9000) + 1000}';
-    final hashed = BCrypt.hashpw(tempPassword, BCrypt.gensalt());
-
-    await _client.from('users').update({
-      'password': hashed,
-      'must_change_password': true,
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('phone_number', phone);
-
-    await _client.from('password_reset_requests').update({
-      'status': 'validated',
-      'validated_by': validatorId,
-      'validated_at': DateTime.now().toIso8601String(),
-    }).eq('id', requestId);
-
-    return tempPassword;
+  /// 🆕 Validation via Edge Function : crée un MDP temporaire
+  /// Retourne le mot de passe temporaire à communiquer au client
+  Future<String> validateResetRequest(
+      String requestId, String validatorId) async {
+    final res = await _client.functions
+        .invoke('admin-reset-password', body: {'requestId': requestId});
+    if (res.status != 200) {
+      throw Exception(res.data['error'] ?? 'Erreur validation');
+    }
+    return res.data['tempPassword'] as String;
   }
 
   Future<void> rejectResetRequest(String requestId, String validatorId) async {
@@ -166,9 +142,9 @@ class SuperAdminRepository {
       'validated_at': DateTime.now().toIso8601String(),
     }).eq('id', requestId);
   }
-    // ========== PAIEMENTS (côté USER) ==========
 
-  /// Insère une demande de paiement en attente de validation
+  // ========== PAIEMENTS (côté USER) ==========
+
   Future<void> insertPendingPayment({
     required String businessId,
     required String? userId,
@@ -186,7 +162,7 @@ class SuperAdminRepository {
       'currency': 'XOF',
       'payment_method': method ?? 'manual',
       'phone_number': phone,
-      'payment_reference': reference, 
+      'payment_reference': reference,
       'status': 'pending',
     });
   }
@@ -202,14 +178,14 @@ class SuperAdminRepository {
     return data?['id'] as String?;
   }
 
-  /// Crée une demande de reset (ignore les doublons pending)
-  Future<void> submitResetRequest(String phone) async {
-    final userId = await findUserIdByPhone(phone);
-    await _client.from('password_reset_requests').insert({
-      'user_id': userId,
-      'phone_number': phone,
-      'status': 'pending',
-    });
+  /// 🆕 Demande de reset via Edge Function (anonyme OK)
+  Future<bool> submitResetRequest(String phone) async {
+    final res = await _client.functions.invoke('request-password-reset',
+        body: {'phoneNumber': phone});
+    if (res.status != 200) {
+      throw Exception(res.data['error'] ?? 'Erreur envoi demande');
+    }
+    return res.data['found'] == true;
   }
 
   Future<PasswordResetRequestModel?> latestResetRequest(String phone) async {

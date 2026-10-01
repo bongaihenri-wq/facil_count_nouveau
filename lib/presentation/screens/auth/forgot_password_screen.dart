@@ -17,9 +17,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _submit() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final userId = await _repo.findUserIdByPhone(_phoneCtrl.text.trim());
-      if (userId == null) throw Exception('Numéro introuvable');
-      await _repo.submitResetRequest(_phoneCtrl.text.trim());
+      final found = await _repo.submitResetRequest(_phoneCtrl.text.trim());
+      if (!found) throw Exception('Numéro introuvable');
       setState(() => _sent = true);
     } catch (e) {
       setState(() => _error = e.toString().replaceAll('Exception: ', ''));
