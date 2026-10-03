@@ -125,17 +125,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   // Logo
                   Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.store_rounded,
-                      size: 64,
-                      color: Colors.white,
-                    ),
-                  ),
+  decoration: BoxDecoration(
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.25),
+        blurRadius: 20,
+        offset: const Offset(0, 8),
+      ),
+    ],
+  ),
+  child: ClipRRect(
+    borderRadius: BorderRadius.circular(28),
+    child: Image.asset(
+      'assets/logo/app_icon_facilcount.png',
+      height: 110,
+      width: 110,
+      fit: BoxFit.cover,
+    ),
+  ),
+),
                   const SizedBox(height: 32),
                   
                   // Titre
