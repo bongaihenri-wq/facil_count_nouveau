@@ -4,6 +4,7 @@ import '../../providers/super_admin_provider.dart';
 import 'payments_validation_screen.dart';
 import 'reset_requests_screen.dart';
 import 'all_users_screen.dart';
+import 'payers_screen.dart';
 
 class SuperAdminDashboardScreen extends ConsumerWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -28,8 +29,8 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
           stats.when(
             data: (s) => Row(children: [
               _statCard('Utilisateurs', '${s['totalUsers'] ?? 0}', Colors.blue),
-              _statCard('Paiements en attente', '${s['pendingPayments'] ?? 0}', Colors.orange),
-              _statCard('Reset en attente', '${s['pendingResets'] ?? 0}', Colors.red),
+              _statCard('Paiements attente', '${s['pendingPayments'] ?? 0}', Colors.orange),
+              _statCard('Reset attente', '${s['pendingResets'] ?? 0}', Colors.red),
             ]),
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Erreur: $e'),
@@ -37,6 +38,8 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
           const SizedBox(height: 24),
           _menuTile(context, Icons.payments, 'Valider les paiements',
               const PaymentsValidationScreen(), Colors.green),
+          _menuTile(context, Icons.people_alt, 'Payeurs (par numéro)',
+              const PayersScreen(), Colors.teal),
           _menuTile(context, Icons.lock_reset, 'Demandes reset mot de passe',
               const ResetRequestsScreen(), Colors.orange),
           _menuTile(context, Icons.people, 'Tous les utilisateurs',
@@ -52,8 +55,10 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(children: [
-              Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
+              Text(value, style: TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+              Text(label, textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 11)),
             ]),
           ),
         ),
@@ -63,10 +68,13 @@ class SuperAdminDashboardScreen extends ConsumerWidget {
           Widget screen, Color color) =>
       Card(
         child: ListTile(
-          leading: CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(icon, color: color)),
+          leading: CircleAvatar(
+              backgroundColor: color.withOpacity(0.15),
+              child: Icon(icon, color: color)),
           title: Text(title),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => screen)),
+          onTap: () => Navigator.push(
+              context, MaterialPageRoute(builder: (_) => screen)),
         ),
       );
 }

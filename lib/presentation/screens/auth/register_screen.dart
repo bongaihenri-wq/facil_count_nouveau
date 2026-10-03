@@ -260,6 +260,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         // Type de commerce
         DropdownButtonFormField<String>(
           value: _businessType,
+          isExpanded: true,
           decoration: InputDecoration(
             labelText: 'Type de commerce',
             prefixIcon: const Icon(Icons.category, color: AppColors.primary),

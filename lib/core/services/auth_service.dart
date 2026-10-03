@@ -1,9 +1,7 @@
 import 'package:bcrypt/bcrypt.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/user_model.dart';
-import '../../data/models/business_model.dart';
 import 'secure_storage_service.dart';
-import '../constants/app_config.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -14,20 +12,21 @@ class AuthService {
     return BCrypt.hashpw(password, BCrypt.gensalt());
   }
 
-  bool _verifyPassword(String password, String hashed) {
-    return BCrypt.checkpw(password, hashed);
+  /// 🆕 Normalise : enlève l'indicatif 225 si présent (0749635522 == +2250749635522)
+  static String _canonicalPhone(String phone) {
+    final d = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (d.length > 10 && d.startsWith('225')) return d.substring(3);
+    return d;
   }
 
-  /// Convertit un téléphone en email synthétique (JWT)
+  /// Convertit un téléphone en email synthétique (format canonique)
   static String phoneToEmail(String phone) =>
-      '${phone.replaceAll(RegExp(r'[^0-9]'), '')}@phone.facilcount.app';
+      '${_canonicalPhone(phone)}@phone.facilcount.app';
 
   // ==================== LOGIN ====================
 
-    Future<UserModel> login(String phoneNumber, String password) async {
+  Future<UserModel> login(String phoneNumber, String password) async {
     try {
-      // 🔐 Login JWT unifié — tout le monde passe par Supabase Auth
-      // (mot de passe vérifié côté SERVEUR, jamais dans le code)
       final res = await _supabase.auth.signInWithPassword(
         email: phoneToEmail(phoneNumber),
         password: password,
@@ -51,8 +50,10 @@ class AuthService {
     } on AuthException catch (e) {
       await SecureStorageService.clearAll();
       final msg = e.message.toLowerCase();
-      if (msg.contains('invalid') || msg.contains('not found') ||
-          msg.contains('credentials') || msg.contains('confirmed')) {
+      if (msg.contains('invalid') ||
+          msg.contains('not found') ||
+          msg.contains('credentials') ||
+          msg.contains('confirmed')) {
         throw Exception('Numéro ou mot de passe incorrect');
       }
       throw Exception('Erreur de connexion: ${e.message}');
@@ -61,9 +62,10 @@ class AuthService {
       throw Exception('Erreur de connexion: $e');
     }
   }
-  // ==================== INSCRIPTION (inchangée) ====================
 
-   Future<UserModel> registerUser({
+  // ==================== INSCRIPTION (Edge Function) ====================
+
+  Future<UserModel> registerUser({
     required String phoneNumber,
     required String password,
     required String businessName,
@@ -88,7 +90,6 @@ class AuthService {
         throw Exception(res.data['error'] ?? "Erreur d'inscription");
       }
 
-      // 🆕 Connexion automatique (le compte auth vient d'être créé)
       return await login(phoneNumber, password);
     } catch (e) {
       throw Exception(
@@ -99,7 +100,6 @@ class AuthService {
   // ==================== SESSION ====================
 
   Future<UserModel?> getCurrentUser() async {
-    // 🆕 Session Supabase d'abord
     final authUser = _supabase.auth.currentUser;
     if (authUser != null) {
       try {
@@ -111,15 +111,11 @@ class AuthService {
         return UserModel.fromJson(data);
       } catch (_) {}
     }
-    // Fallback legacy
     final userId = await SecureStorageService.getUserId();
     if (userId == null) return null;
     try {
-      final response = await _supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single();
+      final response =
+          await _supabase.from('users').select('*').eq('id', userId).single();
       return UserModel.fromJson(response);
     } catch (e) {
       await logout();
@@ -160,7 +156,7 @@ class AuthService {
     await SecureStorageService.clearAll();
   }
 
-  // ==================== GESTION USERS (inchangée) ====================
+  // ==================== GESTION USERS ====================
 
   Future<UserModel> updateUser(String userId, Map<String, dynamic> data) async {
     try {
@@ -181,7 +177,7 @@ class AuthService {
     }
   }
 
-    Future<UserModel> createUser({
+  Future<UserModel> createUser({
     required String phoneNumber,
     required String password,
     required String businessId,
@@ -252,11 +248,10 @@ class AuthService {
   }
 
   Future<void> changePassword(String phoneNumber, String newPassword) async {
-    // 1. Met à jour côté Supabase Auth (si session Supabase active)
     try {
-      await _supabase.auth.updateUser(UserAttributes(password: newPassword));
+      await _supabase.auth
+          .updateUser(UserAttributes(password: newPassword));
     } catch (_) {}
-    // 2. Sync public.users + retire le flag
     final hashed = BCrypt.hashpw(newPassword, BCrypt.gensalt());
     await _supabase
         .from('users')

@@ -8,6 +8,7 @@ import 'widgets/debt_summary_card.dart';
 import 'widgets/notification_badge.dart';
 import 'dialogs/add_transaction_dialog.dart';
 import '../notifications_screen.dart';
+import '../../widgets/business_name_badge.dart';
 
 class CashScreen extends ConsumerWidget {
   const CashScreen({super.key});
@@ -58,6 +59,7 @@ class CashScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const BusinessNameBadge(),
                 // Solde principal avec date intégrée
                 CashBalanceCard(
                   netFlow: state.summary.netCashFlow,

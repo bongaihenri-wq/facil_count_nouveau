@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../widgets/business_name_badge.dart';
 
 import '/../data/models/product_model.dart';
 import '/presentation/providers/stock_provider.dart';
@@ -69,6 +70,7 @@ class StockScreen extends ConsumerWidget {
           ? const Center(child: Text('Aucun produit trouvé'))
           : Column(
               children: [
+                const BusinessNameBadge(),
                 _StatsCard(stats: stats),
                 Expanded(
                   child: ListView.builder(

@@ -4,6 +4,7 @@ import '../../providers/product_provider.dart';
 import '../../../data/models/product_model.dart'; // AJOUTER CET IMPORT
 import 'dialogs/add_product_dialog.dart';
 import 'product_list.dart';
+import '../../widgets/business_name_badge.dart';
 
 class ProductScreen extends ConsumerWidget {
   const ProductScreen({super.key});
@@ -58,6 +59,7 @@ class ProductScreen extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              const BusinessNameBadge(),
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
               Text('Erreur: $err'),

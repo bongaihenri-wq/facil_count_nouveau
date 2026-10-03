@@ -7,6 +7,7 @@ import 'widgets/chart_section.dart';
 import 'widgets/kpi_cards.dart';
 import 'widgets/product_ranking.dart';
 import 'widgets/quick_actions.dart';
+import '../../widgets/business_name_badge.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -43,6 +44,7 @@ class DashboardScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const BusinessNameBadge(),
                 // 7. Filtre avec padding bas
                 _buildPeriodSelector(context, ref, currentPeriod, themeColor),
                 const SizedBox(height: 24),

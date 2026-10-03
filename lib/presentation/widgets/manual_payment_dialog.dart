@@ -25,6 +25,7 @@ class ManualPaymentDialog extends ConsumerStatefulWidget {
 class _ManualPaymentDialogState extends ConsumerState<ManualPaymentDialog> {
   final _refController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _codeController = TextEditingController();
   bool _loading = false;
   String? _error;
 
@@ -32,6 +33,7 @@ class _ManualPaymentDialogState extends ConsumerState<ManualPaymentDialog> {
   void dispose() {
     _refController.dispose();
     _phoneController.dispose();
+    _codeController.dispose();
     super.dispose();
   }
 
@@ -45,7 +47,6 @@ class _ManualPaymentDialogState extends ConsumerState<ManualPaymentDialog> {
       final userId = await SecureStorageService.getUserId();
       if (userId == null) throw Exception('Session expirée, reconnectez-vous');
 
-      // 🆕 Récupère business_id directement (évite l'incompatibilité BusinessHelper/WidgetRef)
       final userData = await Supabase.instance.client
           .from('users')
           .select('business_id')
@@ -63,11 +64,12 @@ class _ManualPaymentDialogState extends ConsumerState<ManualPaymentDialog> {
             ? null
             : _phoneController.text.trim(),
         reference: _refController.text.trim(),
+        businessCode: _codeController.text.trim().isEmpty
+            ? null
+            : _codeController.text.trim(),
       );
 
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       setState(() {
         _loading = false;
@@ -115,6 +117,16 @@ class _ManualPaymentDialogState extends ConsumerState<ManualPaymentDialog> {
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 15),
+            const Text("5. Code boutique (optionnel) :",
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _codeController,
+              decoration: const InputDecoration(
+                hintText: "Ex: LAV-5d65",
+                border: OutlineInputBorder(),
+              ),
+            ),
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!,
@@ -133,12 +145,9 @@ class _ManualPaymentDialogState extends ConsumerState<ManualPaymentDialog> {
           onPressed: _loading ? null : _submit,
           child: _loading
               ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-              : const Text("Envoyer",
-                  style: TextStyle(color: Colors.white)),
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text("Envoyer", style: TextStyle(color: Colors.white)),
         ),
       ],
     );

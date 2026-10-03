@@ -2,13 +2,14 @@ class PaymentModel {
   final String id;
   final String? userId;
   final String? businessId;
-  final String planType;      // base | elite | premium
+  final String planType; // base | medium | elite | premium
   final double amount;
   final String currency;
   final String? paymentMethod;
   final String? phoneNumber;
   final String? reference;
-  final String status;        // pending | validated | rejected
+  final String? businessCode; // 🆕
+  final String status; // pending | validated | rejected
   final DateTime createdAt;
   final DateTime? validatedAt;
 
@@ -22,6 +23,7 @@ class PaymentModel {
     this.paymentMethod,
     this.phoneNumber,
     this.reference,
+    this.businessCode,
     required this.status,
     required this.createdAt,
     this.validatedAt,
@@ -36,7 +38,8 @@ class PaymentModel {
         currency: json['currency'] ?? 'XOF',
         paymentMethod: json['payment_method'],
         phoneNumber: json['phone_number'],
-        reference: json['reference'],
+        reference: json['payment_reference'] ?? json['reference'],
+        businessCode: json['business_code'],
         status: json['status'] ?? 'pending',
         createdAt: DateTime.parse(json['created_at']),
         validatedAt: json['validated_at'] != null

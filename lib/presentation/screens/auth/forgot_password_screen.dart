@@ -80,7 +80,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 style: const TextStyle(color: Colors.red),
                 textAlign: TextAlign.center),
           ],
-          const SizedBox(height: 100), // padding bas pour navigation
+          const SizedBox(height: 100),
         ]),
       ),
     );

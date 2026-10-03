@@ -8,6 +8,7 @@ import '../../../data/models/purchase_model.dart';
 import '../purchases/purchase_list.dart';
 import '/presentation/screens/purchases/purchase_dashboard.dart'; 
 import '../purchases/dialogs/add_purchase_dialog.dart'; 
+import '../../widgets/business_name_badge.dart';
 
 // 🎯 Le provider d'état pour la période des achats (par défaut : mois en cours)
 final selectedPurchasePeriodProvider = StateProvider<DateFilterRange>((ref) {
@@ -81,6 +82,7 @@ class PurchaseScreen extends ConsumerWidget {
 
           return Column(
             children: [
+              const BusinessNameBadge(),
               // 📅 FILTRE PÉRIODE
               GestureDetector(
                 onTap: () => _showPeriodPicker(context, ref),

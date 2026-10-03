@@ -5,7 +5,8 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/common/app_drawer.dart';
 import '../profile/user_management_screen.dart';
 import '../home/home_screen.dart';
-import '../dashboard/dashboard_screen.dart'; 
+import '../dashboard/dashboard_screen.dart';
+import '../../widgets/business_switcher.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -89,8 +90,12 @@ class AdminDashboardScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            
+            const SizedBox(height: 8),
+
+            // 🆕 SÉLECTEUR DE BOUTIQUE (dans le build, dans la Column)
+            const BusinessSwitcher(),
+            const SizedBox(height: 16),
+
             const Text(
               'Fonctionnalités Admin',
               style: TextStyle(
@@ -99,14 +104,13 @@ class AdminDashboardScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
-                // 🟢 Étape 1 : On donne plus de hauteur aux cartes pour éviter l'overflow
-                childAspectRatio: 0.9, 
+                childAspectRatio: 0.9,
                 children: [
                   _buildFeatureCard(
                     icon: Icons.people,
@@ -126,7 +130,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                     subtitle: 'Éléments verrouillés',
                     color: Colors.orange,
                     onTap: () {
-                      // Ton action de déverrouillage ici
+                      // Action de déverrouillage
                     },
                   ),
                   _buildFeatureCard(
@@ -134,12 +138,10 @@ class AdminDashboardScreen extends ConsumerWidget {
                     title: 'Commerce',
                     subtitle: 'Paramètres',
                     color: Colors.green,
-                    // 🟢 Étape 2 : Lien vers l'écran HomeScreen
                     onTap: () {
                       Navigator.push(
                         context,
-                        // Remplace "HomeScreen" par le nom exact de ta classe d'accueil
-                        MaterialPageRoute(builder: (context) => const HomeScreen()), 
+                        MaterialPageRoute(builder: (context) => const HomeScreen()),
                       );
                     },
                   ),
@@ -148,20 +150,17 @@ class AdminDashboardScreen extends ConsumerWidget {
                     title: 'Rapports',
                     subtitle: 'Statistiques',
                     color: Colors.purple,
-                    // 🟢 Étape 3 : Lien vers l'écran Tableau de bord
                     onTap: () {
                       Navigator.push(
                         context,
-                        // Remplace "DashboardScreen" par le nom exact de ta classe dashboard
-                        MaterialPageRoute(builder: (context) => const DashboardScreen()), 
+                        MaterialPageRoute(builder: (context) => const DashboardScreen()),
                       );
                     },
                   ),
                 ],
               ),
             ),
-            
-            // 🟢 Étape 4 : Un espace invisible de 20px tout en bas de l'écran
+
             const SizedBox(height: 20),
           ],
         ),
@@ -183,7 +182,7 @@ class AdminDashboardScreen extends ConsumerWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(12), // 🟢 Réduit un peu le padding pour gagner de l'espace
+          padding: const EdgeInsets.all(12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -193,11 +192,9 @@ class AdminDashboardScreen extends ConsumerWidget {
                   color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 28), // 🟢 Taille légèrement réduite
+                child: Icon(icon, color: color, size: 28),
               ),
               const SizedBox(height: 8),
-              
-              // 🟢 Flexible et texte coupé avec "..." si l'écran est vraiment trop petit
               Flexible(
                 child: Text(
                   title,

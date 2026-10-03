@@ -11,6 +11,7 @@ import 'widgets/sale_list.dart';
 import 'widgets/sale_dashboard.dart';
 import '../sales/dialogs/add_sale_dialog.dart';
 import 'dialogs/filter_dialog.dart';
+import '../../widgets/business_name_badge.dart';
 
 // 🎯 Le provider d'état pour la période (par défaut : mois en cours)
 // On l'appelle différemment pour ne pas entrer en conflit avec celui des dépenses
@@ -82,6 +83,7 @@ class SaleScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    const BusinessNameBadge(),
                     Icon(Icons.calendar_month, size: 18, color: Colors.green.shade700),
                     const SizedBox(width: 8),
                     Text(

@@ -11,6 +11,7 @@ import 'dialogs/add_expense_dialog.dart';
 import 'dialogs/filter_dialog.dart';
 import 'widgets/expense_dashboard.dart';
 import 'widgets/expense_list.dart';
+import '../../widgets/business_name_badge.dart';
 
 // 🎯 Le provider d'état pour la période (utilisé localement par cet écran)
 final selectedPeriodProvider = StateProvider<DateFilterRange>((ref) {
@@ -85,6 +86,7 @@ Widget build(BuildContext context, WidgetRef ref) {
     ),
     body: Column(
       children: [
+        const BusinessNameBadge(),
         // 📅 FILTRE PÉRIODE
         GestureDetector(
           onTap: () => _showPeriodPicker(context, ref),

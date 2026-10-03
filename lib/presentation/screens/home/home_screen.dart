@@ -9,8 +9,8 @@ import '../purchases/purchase_body.dart';
 import '../sales/sale_body.dart';
 import 'widgets/quick_add_sheet.dart';
 import '../../widgets/sync/sync_indicator.dart';
+import '../../widgets/business_name_badge.dart';
 
-// 🔥 CORRECTION DES IMPORTS : On n'utilise plus de "as alias" pour éviter les conflits
 import '../sales/dialogs/filter_dialog.dart';
 import '../sales/dialogs/add_sale_dialog.dart';
 import '../purchases/dialogs/filter_purchase_dialog.dart';
@@ -45,11 +45,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         elevation: 2,
         centerTitle: true,
         actions: [
-          const SyncIndicator(), 
-          ..._buildAppBarActions(), 
+          const SyncIndicator(),
+          ..._buildAppBarActions(),
         ],
       ),
-      body: _screens[_currentIndex],
+      // ✅ CORRIGÉ : badge au-dessus de tous les onglets
+      body: Column(
+        children: [
+          const BusinessNameBadge(),
+          Expanded(child: _screens[_currentIndex]),
+        ],
+      ),
       floatingActionButton: _buildFloatingActionButton(),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
@@ -127,14 +133,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: filters.isActive ? Colors.white : Colors.white70,
                   size: filters.isActive ? 28 : 24,
                 ),
-                // 🔥 MODIFIÉ : Appel direct sans alias
                 onPressed: () => showPurchaseFilterDialog(context),
               ),
             );
           }),
           IconButton(
             icon: const Icon(Icons.add),
-            // 🔥 MODIFIÉ : Utilisation directe de showDialog
             onPressed: () => _openAddPurchaseDialog(),
           ),
         ];
@@ -155,14 +159,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: filters.isActive ? Colors.white : Colors.white70,
                   size: filters.isActive ? 28 : 24,
                 ),
-                // 🔥 MODIFIÉ : Appel direct sans alias
                 onPressed: () => showSaleFilterDialog(context),
               ),
             );
           }),
           IconButton(
             icon: const Icon(Icons.add),
-            // 🔥 MODIFIÉ : Utilisation directe de showDialog
             onPressed: () => _openAddSaleDialog(),
           ),
         ];
@@ -242,7 +244,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _manualSync() {
     ref.read(syncStateProvider.notifier).sync();
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Row(
@@ -278,14 +280,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } else if (_currentIndex == 1) {
       return FloatingActionButton(
         backgroundColor: Colors.blue[700],
-        // 🔥 MODIFIÉ : Utilisation directe de showDialog
         onPressed: () => _openAddPurchaseDialog(),
         child: const Icon(Icons.add, color: Colors.white),
       );
     } else if (_currentIndex == 2) {
       return FloatingActionButton(
         backgroundColor: Colors.green[700],
-        // 🔥 MODIFIÉ : Utilisation directe de showDialog
         onPressed: () => _openAddSaleDialog(),
         child: const Icon(Icons.add, color: Colors.white),
       );
@@ -293,7 +293,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return null;
   }
 
-  // 🔥 NOUVELLE MÉTHODE : Pour ouvrir la boîte des ventes
   void _openAddSaleDialog() {
     showDialog(
       context: context,
@@ -301,11 +300,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // 🔥 NOUVELLE MÉTHODE : Pour ouvrir la boîte des achats
   void _openAddPurchaseDialog() {
     showDialog(
       context: context,
-      builder: (context) => const AddPurchaseDialog(), // Ajuste si le widget s'appelle autrement
+      builder: (context) => const AddPurchaseDialog(),
     );
   }
 
