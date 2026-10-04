@@ -7,6 +7,7 @@ import '../profile/user_management_screen.dart';
 import '../home/home_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../../widgets/business_switcher.dart';
+import '../lock/lock_management_screen.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -92,7 +93,6 @@ class AdminDashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
 
-            // 🆕 SÉLECTEUR DE BOUTIQUE (dans le build, dans la Column)
             const BusinessSwitcher(),
             const SizedBox(height: 16),
 
@@ -130,7 +130,12 @@ class AdminDashboardScreen extends ConsumerWidget {
                     subtitle: 'Éléments verrouillés',
                     color: Colors.orange,
                     onTap: () {
-                      // Action de déverrouillage
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LockManagementScreen(),
+                        ),
+                      );
                     },
                   ),
                   _buildFeatureCard(

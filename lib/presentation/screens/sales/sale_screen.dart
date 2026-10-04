@@ -73,6 +73,7 @@ class SaleScreen extends ConsumerWidget {
       body: salesAsync.when(
         data: (_) => Column(
           children: [
+            const BusinessNameBadge(),
             // 📅 2. FILTRE PÉRIODE (Juste en dessous de l'app bar)
             GestureDetector(
               onTap: () => _showPeriodPicker(context, ref),
@@ -83,7 +84,7 @@ class SaleScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const BusinessNameBadge(),
+                  
                     Icon(Icons.calendar_month, size: 18, color: Colors.green.shade700),
                     const SizedBox(width: 8),
                     Text(

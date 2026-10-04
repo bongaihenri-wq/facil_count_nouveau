@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/expense_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/expense_provider.dart';
-import '../../../../core/utils/date_filter_helper.dart'; // Assure-toi que l'import est correct
 
 void showEditExpenseDialog(BuildContext context, ExpenseModel expense) {
   showDialog(
@@ -49,13 +49,11 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
   Widget build(BuildContext context) {
     final state = ref.watch(expenseNotifierProvider);
 
-    // Récupération des suggestions réelles via le provider
     final suggestions = ref.watch(expenseSuggestionsProvider).maybeWhen(
           data: (list) => list,
           orElse: () => <String>[],
         );
 
-    // Vue si la dépense est déjà verrouillée au chargement
     if (_locked) {
       return _buildLockedView();
     }
@@ -76,8 +74,6 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
               ),
               const Divider(),
               const SizedBox(height: 8),
-
-              // --- CHAMP NOM AVEC AUTOCOMPLÉTION AMÉLIORÉ ---
               LayoutBuilder(
                 builder: (context, constraints) {
                   return Autocomplete<String>(
@@ -124,7 +120,6 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
                       );
                     },
                     fieldViewBuilder: (context, fieldTextController, focusNode, onFieldSubmitted) {
-                      // Initialisation du controller interne avec la valeur existante
                       if (fieldTextController.text.isEmpty && _nameCtrl.text.isNotEmpty) {
                         fieldTextController.text = _nameCtrl.text;
                       }
@@ -143,8 +138,6 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
                 },
               ),
               const SizedBox(height: 16),
-
-              // --- MONTANT ---
               TextField(
                 controller: _amountCtrl,
                 decoration: const InputDecoration(
@@ -156,8 +149,6 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               const SizedBox(height: 16),
-
-              // --- BÉNÉFICIAIRE ---
               TextField(
                 controller: _recipientCtrl,
                 decoration: const InputDecoration(
@@ -167,8 +158,6 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // --- FACTURE ---
               TextField(
                 controller: _invoiceCtrl,
                 decoration: const InputDecoration(
@@ -178,8 +167,6 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // --- DATE ---
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -205,10 +192,8 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
           ),
           child: state.isLoading
               ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
+                  height: 20, width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Text('Enregistrer'),
         ),
       ],
@@ -216,6 +201,9 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
   }
 
   Widget _buildLockedView() {
+    final role = ref.read(authProvider).currentUser?.role;
+    final isAdmin = role == 'admin' || role == 'super_admin';
+
     return AlertDialog(
       title: const Row(
         children: [
@@ -228,7 +216,8 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Nom: ${widget.expense.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text('Nom: ${widget.expense.name}',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text('Montant: ${widget.expense.amount} CFA'),
           const SizedBox(height: 4),
@@ -241,10 +230,14 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Fermer'),
-        ),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+        // 🆕 Déverrouillage : ADMIN SEUL
+        if (isAdmin)
+          TextButton.icon(
+            onPressed: _unlockAndEdit,
+            icon: const Icon(Icons.lock_open, color: Colors.red, size: 18),
+            label: const Text('Déverrouiller', style: TextStyle(color: Colors.red)),
+          ),
       ],
     );
   }
@@ -259,10 +252,34 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
     if (picked != null) setState(() => _expenseDate = picked);
   }
 
+  Future<void> _unlockAndEdit() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Déverrouiller ?'),
+        content: const Text(
+          'Êtes-vous sûr de vouloir déverrouiller cette dépense ? '
+          'Elle pourra être modifiée ou supprimée.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Non')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Oui, déverrouiller'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _locked = false);
+    }
+  }
+
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
-    final amountText = _amountCtrl.text.trim();
-    final amount = double.tryParse(amountText) ?? 0;
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
 
     if (name.isEmpty || amount <= 0) {
       _showError('Nom et montant valides requis');
@@ -279,7 +296,6 @@ class _EditExpenseDialogState extends ConsumerState<_EditExpenseDialog> {
             locked: _locked,
           );
 
-      // On rafraîchit la liste globale (nécessaire si on change de date ou de montant)
       ref.invalidate(filteredExpensesProvider);
 
       if (mounted) Navigator.pop(context);

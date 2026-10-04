@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/product_model.dart';
 import '../../../../data/models/sale_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/sale_provider.dart';
 import '../../sales/widgets/product_selector.dart';
 import '../../../providers/product_provider.dart';
@@ -94,7 +95,6 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Toggle Verrouiller
             SwitchListTile(
               title: const Text('Verrouiller cette vente'),
               subtitle: const Text('Empêche toute modification future'),
@@ -102,10 +102,7 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
               onChanged: (v) => setState(() => _locked = v),
               activeColor: Colors.orange,
             ),
-
             const Divider(),
-
-            // Sélecteur produit
             if (_isLoadingProduct)
               const Center(child: CircularProgressIndicator())
             else
@@ -118,10 +115,7 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
                 loading: () => const CircularProgressIndicator(),
                 error: (_, __) => const Text('Erreur chargement produits'),
               ),
-
             const SizedBox(height: 16),
-
-            // Quantité
             TextField(
               controller: _quantityCtrl,
               decoration: const InputDecoration(
@@ -131,27 +125,19 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
-
             const SizedBox(height: 16),
-
-            // Montant
             TextField(
               controller: _amountCtrl,
               decoration: const InputDecoration(
                 labelText: 'Montant total (CFA) *',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // Client
             TextField(
               controller: _customerCtrl,
               decoration: const InputDecoration(
@@ -159,19 +145,13 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
                 border: OutlineInputBorder(),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Date
             OutlinedButton.icon(
               onPressed: _pickDate,
               icon: const Icon(Icons.calendar_today),
               label: Text(DateFormat('dd/MM/yyyy').format(_saleDate)),
             ),
-
             const SizedBox(height: 8),
-
-            // Payé
             SwitchListTile(
               title: const Text('Payé (cash)'),
               value: _paid,
@@ -189,10 +169,8 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
           onPressed: state.isLoading || _isLoadingProduct ? null : _submit,
           child: state.isLoading
               ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Enregistrer'),
         ),
       ],
@@ -200,12 +178,15 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
   }
 
   Widget _buildLockedView() {
+    final role = ref.read(authProvider).currentUser?.role;
+    final isAdmin = role == 'admin' || role == 'super_admin';
+
     return AlertDialog(
-      title: Row(
+      title: const Row(
         children: [
-          const Icon(Icons.lock, color: Colors.orange),
-          const SizedBox(width: 8),
-          const Text('Vente verrouillée'),
+          Icon(Icons.lock, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Vente verrouillée'),
         ],
       ),
       content: Column(
@@ -214,15 +195,9 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
         children: [
           _buildInfoRow('Produit', widget.sale.productName ?? 'Inconnu'),
           _buildInfoRow('Quantité', '${widget.sale.quantity}'),
-          _buildInfoRow(
-            'Montant',
-            '${widget.sale.amount.toStringAsFixed(0)} CFA',
-          ),
+          _buildInfoRow('Montant', '${widget.sale.amount.toStringAsFixed(0)} CFA'),
           _buildInfoRow('Client', widget.sale.customer ?? '-'),
-          _buildInfoRow(
-            'Date',
-            DateFormat('dd/MM/yyyy').format(widget.sale.saleDate),
-          ),
+          _buildInfoRow('Date', DateFormat('dd/MM/yyyy').format(widget.sale.saleDate)),
           _buildInfoRow('Statut', widget.sale.paid ? 'Payé' : 'Non payé'),
           const SizedBox(height: 16),
           Container(
@@ -252,14 +227,12 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Fermer'),
         ),
-        // Option déverrouiller (avec confirmation)
-        TextButton(
-          onPressed: _showUnlockConfirm,
-          child: const Text(
-            'Déverrouiller',
-            style: TextStyle(color: Colors.red),
+        // 🆕 Déverrouillage : ADMIN SEUL
+        if (isAdmin)
+          TextButton(
+            onPressed: _showUnlockConfirm,
+            child: const Text('Déverrouiller', style: TextStyle(color: Colors.red)),
           ),
-        ),
       ],
     );
   }
@@ -272,16 +245,12 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
         children: [
           SizedBox(
             width: 80,
-            child: Text(
-              '$label :',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-            ),
+            child: Text('$label :',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-            ),
+            child: Text(value,
+                style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
           ),
         ],
       ),
@@ -295,9 +264,7 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-    if (picked != null) {
-      setState(() => _saleDate = picked);
-    }
+    if (picked != null) setState(() => _saleDate = picked);
   }
 
   Future<void> _showUnlockConfirm() async {
@@ -342,29 +309,19 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
       return;
     }
 
-    // 🔥 VÉRIFICATION STOCK (si changement de quantité)
     final oldQuantity = widget.sale.quantity;
     final quantityDiff = quantity - oldQuantity;
-    
+
     if (quantityDiff > 0 && quantityDiff > _selectedProduct!.currentStock) {
       _showError(
         'Stock insuffisant pour augmenter la quantité.\n'
         'Stock disponible: ${_selectedProduct!.currentStock}\n'
-        'Augmentation demandée: +$quantityDiff'
+        'Augmentation demandée: +$quantityDiff',
       );
       return;
     }
 
     try {
-      print('🔥 TENTATIVE MISE À JOUR');
-      print('  ID vente: ${widget.sale.id}');
-      print('  ID produit: ${_selectedProduct!.id}');
-      print('  Quantité: $quantity (avant: $oldQuantity)');
-      print('  Montant: $amount');
-      print('  Date: $_saleDate');
-      print('  Payé: $_paid');
-      print('  Verrouillé: $_locked');
-      
       await ref.read(saleNotifierProvider.notifier).updateSale(
         id: widget.sale.id,
         productId: _selectedProduct!.id,
@@ -376,49 +333,24 @@ class _EditSaleDialogState extends ConsumerState<_EditSaleDialog> {
         locked: _locked,
       );
 
-      print('✅ updateSale terminé sans erreur');
-
-      // 🔥 VÉRIFICATION IMMÉDIATE (Adapté au nouveau .family) 🟢
       final currentSalePeriod = ref.read(selectedSalePeriodProvider);
-      final sales = await ref.read(salesProvider(currentSalePeriod).future);
-      
-      if (sales.isNotEmpty) {
-        final updatedSale = sales.firstWhere(
-          (s) => s.id == widget.sale.id,
-          orElse: () => throw Exception('Vente non trouvée après maj'),
-        );
-        print('🔍 VÉRIFICATION:');
-        print('  Quantité en base: ${updatedSale.quantity}');
-        print('  Montant en base: ${updatedSale.amount}');
-      }
-
-      // On invalide les deux providers pour forcer l'actualisation à l'écran
-      ref.invalidate(salesProvider);
+      ref.invalidate(salesProvider(currentSalePeriod));
       ref.invalidate(productsProvider);
 
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Vente modifiée avec succès'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('✅ Vente modifiée avec succès'), backgroundColor: Colors.green),
         );
       }
-    } catch (e, stack) {
-      print('❌ ERREUR: $e');
-      print(stack);
+    } catch (e) {
       _showError('Erreur: $e');
     }
   }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(msg), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating),
     );
   }
 }

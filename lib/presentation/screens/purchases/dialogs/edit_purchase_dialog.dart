@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/product_model.dart';
 import '../../../../data/models/purchase_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/purchase_provider.dart';
 import '../../sales/widgets/product_selector.dart';
 import '../../../providers/product_provider.dart';
@@ -21,8 +22,7 @@ class _EditPurchaseDialog extends ConsumerStatefulWidget {
   const _EditPurchaseDialog({required this.purchase});
 
   @override
-  ConsumerState<_EditPurchaseDialog> createState() =>
-      _EditPurchaseDialogState();
+  ConsumerState<_EditPurchaseDialog> createState() => _EditPurchaseDialogState();
 }
 
 class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
@@ -38,13 +38,9 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
   @override
   void initState() {
     super.initState();
-    _quantityCtrl = TextEditingController(
-      text: widget.purchase.quantity.toString(),
-    );
-    _amountCtrl = TextEditingController(
-      text: widget.purchase.amount.toString(),
-    );
-    _supplierCtrl = TextEditingController(text: widget.purchase.supplier ?? ''); // 👈 Corrigé
+    _quantityCtrl = TextEditingController(text: widget.purchase.quantity.toString());
+    _amountCtrl = TextEditingController(text: widget.purchase.amount.toString());
+    _supplierCtrl = TextEditingController(text: widget.purchase.supplier ?? '');
     _purchaseDate = widget.purchase.purchaseDate;
     _paid = widget.purchase.paid;
     _locked = widget.purchase.locked;
@@ -69,7 +65,6 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
           name: widget.purchase.productName ?? 'Produit inconnu',
           category: 'Autre',
           createdAt: DateTime.now(),
-       
         ),
       );
       setState(() {
@@ -85,7 +80,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
     final state = ref.watch(purchaseNotifierProvider);
-    final themeColor = Colors.blue.shade700; // Couleur harmonisée
+    final themeColor = Colors.blue.shade700;
 
     if (_locked) {
       return _buildLockedView();
@@ -103,7 +98,6 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Verrouiller
             SwitchListTile(
               title: const Text('Verrouiller cet achat'),
               subtitle: const Text('Empêche toute modification future'),
@@ -111,10 +105,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
               onChanged: (v) => setState(() => _locked = v),
               activeColor: themeColor,
             ),
-
             const Divider(),
-
-            // Produit
             if (_isLoadingProduct)
               const Center(child: CircularProgressIndicator())
             else
@@ -127,10 +118,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
                 loading: () => const CircularProgressIndicator(),
                 error: (_, __) => const Text('Erreur chargement produits'),
               ),
-
             const SizedBox(height: 16),
-
-            // Quantité
             TextField(
               controller: _quantityCtrl,
               decoration: const InputDecoration(
@@ -141,10 +129,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
-
             const SizedBox(height: 16),
-
-            // Montant
             TextField(
               controller: _amountCtrl,
               decoration: const InputDecoration(
@@ -152,17 +137,12 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.attach_money),
               ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // Fournisseur
             TextField(
               controller: _supplierCtrl,
               decoration: const InputDecoration(
@@ -171,22 +151,14 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
                 prefixIcon: Icon(Icons.business),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Date
             OutlinedButton.icon(
               onPressed: _pickDate,
               icon: const Icon(Icons.calendar_today),
               label: Text(DateFormat('dd/MM/yyyy').format(_purchaseDate)),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
-              ),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
             ),
-
             const SizedBox(height: 8),
-
-            // Payé
             SwitchListTile(
               title: const Text('Payé'),
               value: _paid,
@@ -217,12 +189,15 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
   }
 
   Widget _buildLockedView() {
+    final role = ref.read(authProvider).currentUser?.role;
+    final isAdmin = role == 'admin' || role == 'super_admin';
+
     return AlertDialog(
-      title: Row(
+      title: const Row(
         children: [
-          const Icon(Icons.lock, color: Colors.orange),
-          const SizedBox(width: 8),
-          const Text('Achat verrouillé'),
+          Icon(Icons.lock, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Achat verrouillé'),
         ],
       ),
       content: Column(
@@ -232,9 +207,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
           Text('Produit: ${widget.purchase.productName ?? 'Inconnu'}'),
           Text('Quantité: ${widget.purchase.quantity}'),
           Text('Montant: ${widget.purchase.formattedAmount}'),
-          Text(
-            'Date: ${DateFormat('dd/MM/yyyy').format(widget.purchase.purchaseDate)}',
-          ),
+          Text('Date: ${DateFormat('dd/MM/yyyy').format(widget.purchase.purchaseDate)}'),
           const SizedBox(height: 16),
           const Text(
             'Cet achat est verrouillé et ne peut pas être modifié.',
@@ -243,18 +216,14 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Fermer'),
-        ),
-        TextButton.icon(
-          onPressed: _showUnlockConfirm,
-          icon: const Icon(Icons.lock_open, color: Colors.red, size: 18),
-          label: const Text(
-            'Déverrouiller',
-            style: TextStyle(color: Colors.red),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+        // 🆕 Déverrouillage : ADMIN SEUL
+        if (isAdmin)
+          TextButton.icon(
+            onPressed: _showUnlockConfirm,
+            icon: const Icon(Icons.lock_open, color: Colors.red, size: 18),
+            label: const Text('Déverrouiller', style: TextStyle(color: Colors.red)),
           ),
-        ),
       ],
     );
   }
@@ -268,9 +237,7 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Colors.orange.shade800,
-            ),
+            colorScheme: ColorScheme.light(primary: Colors.orange.shade800),
           ),
           child: child!,
         );
@@ -284,14 +251,9 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Déverrouiller ?'),
-        content: const Text(
-          'Êtes-vous sûr de vouloir déverrouiller cet achat ?',
-        ),
+        content: const Text('Êtes-vous sûr de vouloir déverrouiller cet achat ?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Non'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Non')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -321,20 +283,16 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
     }
 
     try {
-      await ref
-          .read(purchaseNotifierProvider.notifier)
-          .updatePurchase(
-            id: widget.purchase.id,
-            productId: _selectedProduct!.id,
-            quantity: quantity,
-            amount: amount,
-            supplierId: _supplierCtrl.text.trim().isEmpty // 👈 CORRIGÉ ICI
-                ? null
-                : _supplierCtrl.text.trim(),
-            purchaseDate: _purchaseDate,
-            paid: _paid,
-            locked: _locked,
-          );
+      await ref.read(purchaseNotifierProvider.notifier).updatePurchase(
+        id: widget.purchase.id,
+        productId: _selectedProduct!.id,
+        quantity: quantity,
+        amount: amount,
+        supplierId: _supplierCtrl.text.trim().isEmpty ? null : _supplierCtrl.text.trim(),
+        purchaseDate: _purchaseDate,
+        paid: _paid,
+        locked: _locked,
+      );
 
       ref.invalidate(purchasesProvider);
       ref.invalidate(productsProvider);
@@ -346,8 +304,8 @@ class _EditPurchaseDialogState extends ConsumerState<_EditPurchaseDialog> {
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
   }
 }
